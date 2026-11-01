@@ -17,7 +17,7 @@ SKIN_SHADE = (232, 214, 210)
 SKIN_DARK = (206, 182, 182)
 LIP = (214, 160, 160)
 LASH = (16, 14, 18)
-IRIS = (40, 38, 46)
+IRIS = (22, 20, 26)
 IRIS_HI = (96, 96, 110)
 SCLERA = (244, 242, 244)
 CLOAK = (50, 58, 44)
@@ -43,11 +43,10 @@ for tx, w in ((6, 4), (82, 5), (90, 3), (14, 2)):
 d.ellipse((-20, 70, 40, 100), fill=FOG)
 d.ellipse((60, 74, 120, 104), fill=FOG)
 
-# --- Hair behind the head (bun + back volume) ---
-d.ellipse((18, 6, 46, 32), fill=HAIR)          # bun
+# --- Hair behind the head ---
 d.ellipse((26, 12, 70, 56), fill=HAIR)         # skull
-d.polygon([(28, 40), (24, 72), (34, 74), (36, 44)], fill=HAIR)   # left back lock
-d.polygon([(68, 40), (72, 70), (62, 72), (60, 44)], fill=HAIR)   # right back lock
+d.polygon([(27, 40), (25, 70), (30, 72), (32, 46)], fill=HAIR)   # left back lock
+d.polygon([(69, 40), (72, 76), (66, 74), (64, 46)], fill=HAIR)   # right back lock
 
 # --- Cloak: hood pooled behind the shoulders ---
 d.polygon([(8, 96), (14, 80), (26, 70), (40, 68), (56, 68), (70, 70),
@@ -95,7 +94,7 @@ d.line((33, 56, 38, 63), fill=SKIN_SHADE)
 d.line((63, 56, 58, 63), fill=SKIN_SHADE)
 d.line((38, 63, 44, 67), fill=SKIN_SHADE)
 d.line((58, 63, 52, 67), fill=SKIN_SHADE)
-d.rectangle((32, 34, 64, 44), fill=SKIN_SHADE)    # shadow under bangs
+d.rectangle((32, 34, 64, 41), fill=SKIN_SHADE)    # shadow under bangs
 
 # Half-lidded eyes (blank, calm)
 def eye(x0, flip):
@@ -106,9 +105,6 @@ def eye(x0, flip):
         d.line((xs(i), 49, xs(i), 52), fill=SCLERA)
     for i in range(3, 8):
         d.line((xs(i), 49, xs(i), 52), fill=IRIS)
-    d.point((xs(5), 51), fill=IRIS_HI)
-    d.point((xs(4), 52), fill=IRIS_HI)
-    d.point((xs(6), 49), fill=(250, 250, 255))   # tiny catchlight
     # heavy upper lid: flat, slightly drooping at the outer corner
     for i in range(0, 11):
         d.point((xs(i), 48), fill=LASH)
@@ -137,44 +133,50 @@ d.line((46, 62, 50, 62), fill=LIP)
 d.point((48, 63), fill=SKIN_SHADE)
 
 # --- Front hair ---
-# Crown
-d.polygon([(28, 34), (30, 22), (38, 14), (48, 11), (58, 13), (66, 22), (68, 34)], fill=HAIR)
-# Long straight bangs, slight side part
-bangs = [
-    (31, 48, 28, 36), (34, 45, 30, 39), (37, 44, 33, 42), (40, 45, 36, 45),
-    (43, 43, 39, 48), (46, 45, 42, 51), (49, 43, 46, 54), (52, 45, 50, 57),
-    (55, 44, 53, 60), (58, 45, 56, 63), (61, 44, 59, 66), (65, 48, 62, 68),
-]
-for tx, ty, bl, br in bangs:
-    d.polygon([(bl, 30), (br, 30), (tx, ty)], fill=HAIR)
-# Face-framing side strands
-d.polygon([(28, 32), (34, 36), (33, 52), (31, 66), (28, 74), (27, 56)], fill=HAIR)
-d.polygon([(68, 32), (63, 36), (64, 52), (66, 64), (69, 80), (70, 56)], fill=HAIR)
-d.line((69, 60, 72, 82), fill=HAIR)            # long thin strand
-d.line((70, 60, 71, 76), fill=HAIR)
+# Crown of the head
+d.ellipse((26, 8, 70, 36), fill=HAIR)
 
-# Messy flyaways from the bun
+# Messy bangs: many separate tapered strands of uneven length
+# (root_x, tip_x, tip_y, half_width)
+strands = [
+    (29, 27, 48, 3), (32, 31, 43, 3), (35, 34, 46, 2), (37, 40, 41, 2),
+    (40, 38, 45, 2), (43, 45, 43, 2), (45, 47, 48, 2), (48, 46, 40, 2),
+    (50, 52, 46, 2), (53, 51, 42, 2), (55, 58, 45, 2), (58, 56, 41, 2),
+    (60, 62, 46, 3), (63, 64, 42, 3), (67, 69, 49, 3),
+]
+for rx, tx, ty, w in strands:
+    d.polygon([(rx - w, 26), (rx + w, 26), (tx, ty)], fill=HAIR)
+# Thin lines inside the fringe to separate the strands
+for rx, tx, ty, w in strands[::2]:
+    d.line((rx, 28, (rx + tx) // 2, (28 + ty) // 2), fill=HAIR_MID)
+
+# Stray tufts poking out of the silhouette
 for poly in (
-    [(24, 10), (28, 8), (22, 2), (18, 0)],          # up-left spike
-    [(20, 16), (20, 20), (10, 17), (5, 19)],        # left spike
-    [(22, 24), (25, 27), (14, 32), (11, 38)],       # down-left spike
-    [(64, 20), (66, 24), (75, 16), (80, 13)],       # right spike
+    [(27, 20), (29, 16), (21, 13)],
+    [(69, 20), (67, 16), (75, 14)],
+    [(36, 11), (39, 9), (32, 5)],
+    [(60, 11), (57, 9), (63, 4)],
+    [(26, 28), (26, 32), (19, 34)],
+    [(70, 28), (70, 32), (77, 35)],
 ):
     d.polygon(poly, fill=HAIR)
 
+# Slim side locks, a little jagged
+d.polygon([(27, 34), (31, 36), (31, 50), (29, 62), (27, 54)], fill=HAIR)
+d.polygon([(28, 52), (30, 56), (26, 64)], fill=HAIR)
+d.polygon([(69, 34), (65, 36), (65, 50), (67, 60), (69, 54)], fill=HAIR)
+d.polygon([(68, 52), (66, 56), (70, 66)], fill=HAIR)
+
+# Ahoge: two strands curling up from the crown
+d.line([(44, 9), (45, 5), (48, 2), (53, 1)], fill=HAIR)
+d.line([(47, 9), (48, 6), (51, 3), (55, 3)], fill=HAIR)
+
 # Hair sheen
 for pts in (
-    [(40, 15), (48, 13), (56, 15)],
-    [(38, 17), (42, 16)],
-    [(24, 12), (30, 10)],
-    [(22, 16), (26, 22)],
+    [(36, 14), (42, 12), (52, 12), (58, 14)],
+    [(31, 18), (34, 16)],
 ):
     d.line(pts, fill=HAIR_HI)
-for x in (36, 44, 52, 60):
-    d.line((x, 20, x - 1, 32), fill=HAIR_MID)
-d.line((66, 40, 67, 60), fill=HAIR_MID)
-d.line((30, 40, 29, 60), fill=HAIR_MID)
-d.line((24, 22, 30, 24), fill=HAIR_MID)
 
 # Dark edge where hair meets background, for a crisp sprite look
 src = img.copy().load()
