@@ -95,60 +95,59 @@ d.line((63, 56, 58, 63), fill=SKIN_SHADE)
 d.line((38, 63, 44, 67), fill=SKIN_SHADE)
 d.line((58, 63, 52, 67), fill=SKIN_SHADE)
 
-# Detailed half-lidded eyes: dark and lightless, calm and blank
-IRIS_ROWS = [(12, 10, 16), (18, 16, 24), (26, 24, 36), (36, 34, 50), (60, 58, 80), (40, 38, 54)]
+# Anime-style eyes: thick tapered lash line, tall iris with dark-to-light gradient
+IRIS_ROWS = [(14, 14, 22), (20, 22, 32), (26, 30, 44), (34, 40, 58), (44, 54, 76),
+             (56, 70, 96), (72, 90, 120), (58, 72, 98)]
+PUPIL = (8, 8, 14)
 SCLERA_SHADE = (214, 208, 220)
 
 def eye(x0, flip):
-    # i = 0 is the outer corner, i = 12 the inner corner
-    xs = (lambda i: x0 + 12 - i) if flip else (lambda i: x0 + i)
+    # i = 0 is the outer corner, i = 11 the inner corner
+    xs = (lambda i: x0 + 11 - i) if flip else (lambda i: x0 + i)
     p = lambda i, y, c: d.point((xs(i), y), fill=c)
-    # double-eyelid crease
-    for i in range(3, 10):
-        p(i, 43, SKIN_DARK)
-    # opening: sclera
-    for y in range(47, 52):
-        for i in range(1, 12):
+    # white of the eye
+    for y in range(45, 53):
+        for i in range(1, 11):
             p(i, y, SCLERA)
-    for i in range(2, 11):
-        p(i, 52, SCLERA)
-    for i in range(1, 12):
-        p(i, 47, SCLERA_SHADE)            # shadow cast by the lid
-    # iris with a dark-to-dim gradient, no highlight
-    for row, y in enumerate(range(47, 53)):
-        lo, hi = (4, 9) if y in (47, 52) else (3, 10)
+    for i in range(2, 10):
+        p(i, 53, SCLERA)
+    for i in range(1, 11):
+        p(i, 45, SCLERA_SHADE)
+    # tall iris
+    for row, y in enumerate(range(45, 53)):
+        lo, hi = (4, 8) if y in (45, 52) else (3, 9)
         for i in range(lo, hi + 1):
             p(i, y, IRIS_ROWS[row])
-    for i in (3, 10):
-        for y in (48, 51):
-            p(i, y, IRIS_ROWS[0])         # darker iris rim
-    for i in range(5, 9):
-        for y in range(48, 51):
-            p(i, y, (8, 6, 10))           # pupil
-    # heavy upper lid with lashes
-    for i in range(1, 12):
-        p(i, 45, LASH)
-    for i in range(0, 13):
-        p(i, 46, LASH)
-    p(0, 47, LASH)
-    p(-1, 45, LASH)                       # outer wing
-    p(-2, 44, LASH)
-    p(-1, 47, LASH)                       # separate lash tick
-    p(1, 44, LASH)
-    p(12, 47, (120, 100, 104))            # inner corner
-    # lower lash line, soft, with a couple of lashes at the outer end
-    for i in range(2, 11):
-        p(i, 53, SKIN_DARK)
-    p(1, 52, (90, 78, 84))
+    for i in range(4, 9):
+        p(i, 53, IRIS_ROWS[-1])
+    for y in range(46, 51):
+        for i in range(5, 8):
+            p(i, y, PUPIL)
+    p(3, 47, IRIS_ROWS[0])
+    p(9, 47, IRIS_ROWS[0])
+    # small soft highlight
+    p(4, 46, (196, 202, 216))
+    p(4, 47, (150, 158, 176))
+    p(7, 51, (110, 126, 156))
+    # thick upper lash line, heaviest at the outer corner
+    for i in range(2, 10):
+        p(i, 43, LASH)
+    for i in range(0, 12):
+        p(i, 44, LASH)
+    p(-1, 44, LASH)
+    p(0, 45, LASH)
+    p(0, 46, LASH)
+    p(-1, 46, LASH)          # outer lash flick
+    p(1, 45, LASH)
+    p(11, 45, (120, 100, 104))
+    # lower lash, short and soft
+    for i in range(3, 9):
+        p(i, 54, SKIN_DARK)
     p(1, 53, (90, 78, 84))
-    p(2, 54, SKIN_DARK)
-    p(4, 54, SKIN_DARK)
-    # faint shade under the eye
-    for i in range(5, 9):
-        p(i, 54, SKIN_SHADE)
+    p(2, 54, (90, 78, 84))
 
 eye(33, flip=False)
-eye(51, flip=True)
+eye(52, flip=True)
 
 # Nose: tiny shadow; mouth: small flat neutral line
 d.point((48, 57), fill=SKIN_DARK)
@@ -157,28 +156,27 @@ d.line((46, 62, 50, 62), fill=LIP)
 d.point((48, 63), fill=SKIN_SHADE)
 
 # --- Front hair ---
-hairline = [(26, 22), (70, 22), (70, 42), (66, 38), (60, 33), (52, 30),
-            (46, 29), (40, 30), (34, 33), (29, 38), (26, 42)]
-# soft shadow just under the hairline
-d.line([(x, y + 1) for x, y in hairline[3:-1]], fill=SKIN_SHADE)
 d.ellipse((26, 8, 70, 38), fill=HAIR)
-d.polygon(hairline, fill=HAIR)
 
-# Swept-back strand lines flowing from the hairline over the head
-for pts in (
-    [(31, 36), (30, 26), (34, 16)],
-    [(36, 32), (37, 22), (42, 13)],
-    [(42, 30), (44, 20), (48, 11)],
-    [(50, 30), (52, 20), (54, 11)],
-    [(57, 32), (60, 22), (60, 14)],
-    [(64, 36), (66, 26), (64, 17)],
-):
-    d.line(pts, fill=HAIR_MID)
-
-# The two long strands left loose over the forehead
-d.polygon([(44, 29), (47, 29), (45, 40), (43, 49)], fill=HAIR)
-d.polygon([(47, 29), (50, 29), (49, 41), (47, 51)], fill=HAIR)
-d.line((46, 31, 44, 45), fill=HAIR_MID)
+# Bangs: pointed clumps of hair, tips resting around the lashes.
+# The two clumps in the middle hang longest, between the eyes.
+# (root_left, root_right, tip_x, tip_y)
+clumps = [
+    (27, 34, 31, 45), (32, 39, 36, 42), (37, 44, 41, 43), (42, 48, 46, 50),
+    (47, 53, 49, 51), (51, 58, 55, 42), (56, 63, 60, 43), (61, 69, 66, 45),
+]
+def clump_poly(rl, rr, tx, ty, dy=0):
+    mid = (28 + ty) // 2
+    return [(rl, 26 + dy), (rr, 26 + dy), (rr - 1, mid + dy), (tx, ty + dy), (rl + 1, mid + dy)]
+# soft shadow cast on the forehead
+for c in clumps[1:-1]:
+    d.polygon(clump_poly(*c, dy=1), fill=SKIN_SHADE)
+for c in clumps:
+    d.polygon(clump_poly(*c), fill=HAIR)
+# strand lines inside each clump
+for rl, rr, tx, ty in clumps:
+    cx = (rl + rr) // 2
+    d.line((cx, 28, (cx + tx) // 2, (28 + ty) // 2 + 2), fill=HAIR_MID)
 
 # Slim, neat side locks
 d.polygon([(27, 36), (31, 40), (31, 52), (29, 62), (27, 54)], fill=HAIR)
