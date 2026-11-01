@@ -11,7 +11,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-YAW, PITCH, ROLL = 16.0, 16.0, 0.0    # deg: turn toward the viewer's left, chin up
+YAW, PITCH, ROLL = 12.0, 32.0, -7.0   # deg: slight turn, chin lifted high, a little tilt (like the reference)
 R_HEAD, R_HAIR = 21.0, 23.6
 CAM_D = 120.0                         # camera distance in head units (perspective strength)
 SS = 2                                # render at 2x, then box-downsample
@@ -223,7 +223,8 @@ def scalp_surface():
 
 
 # bangs: wide soft clumps of different lengths (centre longitude, half width, tip polar angle), in degrees
-CLUMPS = [(-56, 12, 93), (-36, 11, 99), (-17, 10, 96), (2, 12, 100), (22, 10, 95), (42, 12, 99), (60, 11, 93)]
+CLUMPS = [(-56, 12, 93), (-36, 11, 99), (-17, 10, 96), (2, 12, 100), (22, 10, 95), (42, 12, 99), (60, 11, 93),
+          (-49, 2.0, 124), (-31, 1.6, 113), (47, 1.9, 120)]     # thin strands crossing the cheeks
 
 
 def bangs_surface():
@@ -238,7 +239,7 @@ def bangs_surface():
         wprof = np.where(s < 0.5, 1.0 - 0.1 * s, 0.95 * np.sqrt(np.clip(1 - ((s - 0.5) / 0.5) ** 2, 0, 1)))
         TH = th0 + (tip - th0) * s + 0 * q
         PH = c + lean * s + hw * wprof * q
-        pts.append(shell_point(TH, PH, R_HAIR + 0.35).reshape(-1, 3))
+        pts.append(shell_point(TH, PH, R_HAIR + (1.3 if hw < math.radians(3) else 0.35)).reshape(-1, 3))
     P = np.concatenate(pts)
     return P, unit(P)
 
@@ -312,7 +313,7 @@ def paint_eyes(img):
         d = Q - C
         du, dv = d @ uvec, d @ vvec
         u = -du * sign                                    # negative = outer corner, like the study
-        w, h = 5.5, 8.5
+        w, h = 5.6, 7.2
         uo, vo = -w + 0.15, 2.2
         k = np.clip((-w + 1.5 - u) / (-w + 1.5 - uo), 0, 1)
         top = 0.5 + (vo - 0.5) * k * k
@@ -321,7 +322,7 @@ def paint_eyes(img):
         inside = is_face & (u >= uo) & (u <= w) & (dv >= top) & (dv <= bot)
         lid = dv - top
         # iris (tall ellipse), low in the opening, nudged toward the near side (+x)
-        icu, icv, irx, iry = 0.55, 5.0, 3.5, 4.7
+        icu, icv, irx, iry = -0.5, 2.3, 3.4, 4.4
         e = ((du - icu) / irx) ** 2 + ((dv - icv) / iry) ** 2
         c = np.where((lid < 1.6)[:, None], SCLERA_SH, SCLERA)
         kk = np.clip(((dv - (icv - iry)) / (2 * iry) * len(IRIS)).astype(int), 0, len(IRIS) - 1)
@@ -343,7 +344,7 @@ def paint_eyes(img):
             | tri(u, dv, (uo - 0.85, 1.5), (uo - 0.2, 2.35), (uo + 0.3, 0.75))
         col[is_face & lash] = LASH
         # lower lid: a soft line, plus a dark tapered stroke closing the outer corner
-        low = (u >= uo + 1.25) & (u <= 0.6 * w) & (dv >= bot + 0.2) & (dv <= bot + 0.75)
+        low = (u >= uo + 1.25) & (u <= 0.8 * w) & (dv >= bot + 0.2) & (dv <= bot + 0.65)
         col[is_face & low] = LASH_LOW
         tt = np.clip((u - uo) / 1.8, 0, 1)
         thc = 0.1 + 0.4 * (1 - tt)
@@ -351,7 +352,7 @@ def paint_eyes(img):
         col[is_face & corner] = LASH
         # crease above the lid
         # brow: thin, a touch lower at the outer end; shows faintly through the bangs
-        vb = -5.6 + 0.5 * np.clip((-w + 2.5 - u) / 1.5, 0, 1)
+        vb = -6.3 + 0.5 * np.clip((-w + 2.5 - u) / 1.5, 0, 1)
         qb = (u - 0.5) / 6.0
         tb = 0.28 + 0.16 * (1 - np.clip(qb * qb, 0, 1))
         brow = (np.abs(qb) <= 1) & (np.abs(dv - vb) <= tb) & ((d * d).sum(-1) < 90)
@@ -405,13 +406,15 @@ def paint_nose_mouth(img):
     sh = np.array([[-0.8, 24.4, 24.3], [1.9, 25.1, 23.5], [-0.1, 25.9, 22.8]])
     blend(img, poly_cov(project(to_world(sh))), NOSE_SH, face)
     xs = np.linspace(-3.0, 3.0, 25)
-    ys = 29.2 + 0.8 * (1 - (xs / 3.0) ** 2)
+    ys = 29.0 + 0.45 * (1 - (xs / 3.0) ** 2)
     m = np.array([surface_xy(x, y) + [0, 0, 0.4] for x, y in zip(xs, ys)])
     blend(img, line_cov(project(to_world(m)), 1.2 * SS), LIP, face)
     for x in (-3.0, 3.0):
         p0 = surface_xy(x, 29.2) + [0, 0, 0.4]
         blend(img, line_cov(project(to_world(np.array([p0, p0 + [0, -0.6, 0]]))), 1.2 * SS), LIP, face)
-    lo = np.array([surface_xy(x, 30.7 + 0.25 * (1 - (x / 1.8) ** 2)) + [0, 0, 0.5] for x in np.linspace(-1.8, 1.8, 9)])
+    gap = np.array([surface_xy(x, y) + [0, 0, 0.4] for x, y in ((-1.7, 29.5), (1.7, 29.5), (1.1, 30.7), (-1.1, 30.7))])
+    blend(img, poly_cov(project(to_world(gap))), (150, 78, 88), face)
+    lo = np.array([surface_xy(x, 31.4 + 0.25 * (1 - (x / 2.0) ** 2)) + [0, 0, 0.5] for x in np.linspace(-2.0, 2.0, 9)])
     blend(img, line_cov(project(to_world(lo)), 0.9 * SS) * 0.7, LIP_HI, face)
 
 
@@ -419,16 +422,17 @@ def paint_nose_mouth(img):
 def body_shapes():
     """Neck and a simple dark top, placed under the projected chin. Returns 2x-pixel polygons."""
     chin = project(to_world(np.array([0.0, 33.5, 17.0])))
-    cx = 0.45 * CX + 0.55 * chin[0]
-    yb = chin[1] + 6.5 * U                     # base of the (short) neck
-    neck = [(cx - 6.4 * U, chin[1] - 9 * U), (cx + 6.4 * U, chin[1] - 9 * U),
-            (cx + 6.1 * U, yb + 1.5 * U), (cx - 6.1 * U, yb + 1.5 * U)]
-    cxb = CX * 0.7 + cx * 0.3
+    cx = 0.55 * CX + 0.45 * chin[0]
+    yb = CY + 37.5 * U                         # neck base / collar line, fixed under the head
+    neck = [(cx - 6.0 * U, chin[1] - 12 * U), (cx + 6.2 * U, chin[1] - 12 * U),
+            (cx + 5.8 * U, yb + 2 * U), (cx - 5.8 * U, yb + 2 * U)]
+    cxb = CX * 0.75 + cx * 0.25
     top = [(cxb - 42 * U, H + 10), (cxb - 40 * U, yb + 15 * U), (cxb - 28 * U, yb + 6.5 * U), (cxb - 14 * U, yb + 2.2 * U),
            (cxb - 7.5 * U, yb + 0.8 * U), (cxb, yb + 2.4 * U), (cxb + 7.5 * U, yb + 0.8 * U), (cxb + 14 * U, yb + 2.2 * U),
            (cxb + 28 * U, yb + 6.5 * U), (cxb + 40 * U, yb + 15 * U), (cxb + 42 * U, H + 10)]
     neckline = top[3:8]
-    return neck, top, neckline, cxb, yb
+    collar = [(cx - 7.6 * U, yb - 6.2 * U), (cx + 7.8 * U, yb - 7.0 * U), (cx + 7.3 * U, yb + 0.6 * U), (cx - 7.1 * U, yb + 1.4 * U)]
+    return neck, top, neckline, collar, cxb, yb
 
 
 def smooth2d(pts, n=10):
@@ -516,7 +520,7 @@ def render():
     # ---- the figure layer (head + hair)
     img = background()
     sk = np.where((ndl < 0.3)[..., None], SKIN_SH, SKIN)
-    sk = np.where((down > 0.62)[..., None], SKIN_SH2, sk)          # the underside of the jaw
+    sk = np.where((down > 0.55)[..., None], SKIN_SH, sk)           # the underside of the jaw, lightly shaded
     img[face] = sk[face]
     hairline_sh = face & dilate(hair, 2 * SS) & ~shift(face, 0, -2 * SS)
     img[hairline_sh] = SKIN_SH
@@ -528,11 +532,12 @@ def render():
     paint_nose_mouth(img)
 
     # ---- body: drawn flat, behind the hair that hangs in front of it
-    neck, top, neckline, cxb, yb = body_shapes()
+    neck, top, neckline, collar, cxb, yb = body_shapes()
     neck_m = poly_cov(neck) >= 0.5
     top_m = poly_cov(smooth2d(top)) >= 0.5
-    body_z = np.where(neck_m, 2.0, -3.0)
-    body = neck_m | top_m
+    col_m = poly_cov(collar) >= 0.5
+    body_z = np.where(neck_m | col_m, 2.0, -3.0)
+    body = neck_m | top_m | col_m
     in_front = fig & (depth > body_z)
     show_body = body & ~in_front
     base = background()
@@ -548,6 +553,12 @@ def render():
     tp[lit] = TOP_HI
     base[neck_m & show_body] = nk[neck_m & show_body]
     base[top_m & show_body] = tp[top_m & show_body]
+    cl = np.full((H, W, 3), (238, 232, 226), float)
+    cl[xcol > cxb + 5 * U] = (206, 196, 200)
+    base[col_m & show_body] = cl[col_m & show_body]
+    band = poly_cov([collar[0], collar[1], (collar[1][0] - 0.3 * U, collar[1][1] + 1.6 * U), (collar[0][0] + 0.3 * U, collar[0][1] + 1.6 * U)]) >= 0.5
+    base[band & show_body] = (54, 46, 60)
+    blend(base, line_cov(collar, 1.1 * SS, closed=True), TOP_LINE, (show_body & dilate(col_m, 2)).astype(float))
     # neckline band and outlines of the body
     nl = smooth2d(neckline)
     blend(base, line_cov(nl, 2.2 * SS), TOP_HI, show_body & top_m)
