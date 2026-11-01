@@ -6,13 +6,13 @@ PIT = (0.0, 1.30)
 SH_L, SH_R = (-0.50, 1.40), (0.50, 1.37)          # viewer's left shoulder slightly lower (contrapposto)
 ELB_L, ELB_R = (-0.575, 2.44), (0.582, 2.40)
 WRI_L, WRI_R = (-0.528, 3.30), (0.508, 3.25)
-HIP_L, HIP_R = (-0.24, 3.30), (0.245, 3.36)       # weight on viewer's left leg -> that hip rides higher
-KNE_L, KNE_R = (-0.14, 4.94), (0.13, 4.99)
-ANK_L, ANK_R = (-0.07, 6.12), (0.255, 6.08)        # supporting ankle under the pit of the neck
+HIP_L, HIP_R = (-0.235, 3.00), (0.245, 3.05)      # weight on viewer's left leg -> that hip rides higher
+KNE_L, KNE_R = (-0.135, 4.52), (0.125, 4.56)      # knee at ~0.71 of the height (Aoi sheet 0.70, book p.64-65 0.716)
+ANK_L, ANK_R = (-0.07, 6.08), (0.255, 6.05)        # supporting ankle under the pit of the neck
 SOLE = 6.36
 NAVEL = (-0.01, 2.75)
-CROTCH = (-0.01, 3.62)
-LOA = [(-0.03, -0.06), (0.0, 0.55), (0.0, 1.30), (0.04, 2.10), (0.0, 2.75), (-0.09, 3.40), (-0.13, 4.94), (-0.07, 6.30)]
+CROTCH = (-0.01, 3.24)                              # half the height (book: bottom of the hip box)
+LOA = [(-0.03, -0.06), (0.0, 0.55), (0.0, 1.30), (0.04, 2.10), (0.0, 2.75), (-0.09, 3.15), (-0.135, 4.52), (-0.07, 6.30)]
 
 BLUE = rgb('#4a7fd0'); RED = rgb('#d8484a'); GREY = rgb('#9aa3b5')
 
@@ -28,6 +28,9 @@ def draw_bones(L):
     L.paint(line([(110, Y0), (110, Y0 + SOLE * HU)], 2.0, taper=(0, 0)), GREY, 0.9)
     y = Y0 + SOLE * HU
     L.paint(line([(70, y), (150, y)], 2.0, taper=(0, 0)), GREY, 0.9)
+    for frac in (0.5, 0.75):
+        y = Y0 + SOLE * HU * frac
+        L.paint(line([(60, y), (175, y)], 3.0, taper=(0, 0)), RED, 0.8)
     # line of action (S curve)
     pencil(L, P(LOA), 4.0, RED, 0.75, taper=(0.1, 0.1))
     # ---- head: sphere + jaw + centre line + feature lines (in the tilted head frame)
@@ -52,10 +55,10 @@ def draw_bones(L):
     rib = [(0.0, 1.31), (0.33, 1.42), (0.39, 1.75), (0.34, 2.10), (0.0, 2.25), (-0.34, 2.12), (-0.39, 1.77), (-0.33, 1.43)]
     pencil(L, P(rib), 2.8, closed=True, taper=(0, 0))
     for side in (-1, 1):
-        pencil(L, P([(side * 0.33, 2.12), (side * 0.28, 2.55), (side * 0.44, 3.10)]), 2.4)
-    hipbox = [(-0.40, 2.98), (0.40, 3.02), (0.47, 3.30), (0.05, 3.64), (-0.05, 3.62), (-0.47, 3.26)]
+        pencil(L, P([(side * 0.33, 2.12), (side * 0.29, 2.42), (side * 0.40, 2.72)]), 2.4)
+    hipbox = [(-0.40, 2.70), (0.40, 2.74), (0.47, 3.00), (0.05, 3.26), (-0.05, 3.24), (-0.47, 2.96)]
     pencil(L, P(hipbox), 2.8, closed=True, taper=(0, 0))
-    pencil(L, P([(-0.40, 2.98), (0.40, 3.02)]), 2.0)
+    pencil(L, P([(-0.40, 2.70), (0.40, 2.74)]), 2.0)
     pencil(L, P([PIT, (0.02, 1.8), NAVEL, CROTCH]), 1.8, op=0.6)
     # bust
     for side in (-1, 1):
@@ -75,9 +78,13 @@ def draw_bones(L):
     for p in (SH_L, SH_R, ELB_L, ELB_R, WRI_L, WRI_R, HIP_L, HIP_R, KNE_L, KNE_R, ANK_L, ANK_R):
         x, y = B(*p); L.paint(ellipse(x, y, 13, 13) - ellipse(x, y, 10.5, 10.5), BLUE, 0.9)
     # hands (wedge) and feet (1:3 wedge, foreshortened from the front)
-    for w, d in ((WRI_L, -1), (WRI_R, 1)):
-        pencil(L, P([(w[0] - 0.06, w[1] + 0.02), (w[0] + 0.07, w[1] + 0.02), (w[0] + 0.05, w[1] + 0.26), (w[0] - 0.05, w[1] + 0.27)]),
-               2.2, closed=True, taper=(0, 0))
+    for w, side in ((WRI_L, -1), (WRI_R, 1)):         # hands: wrist block + palm wedge + finger lines, angled toward the thigh
+        IN = -side; a = math.radians(11) * IN
+        def R(dx, dy): return (w[0] + dx * math.cos(a) + dy * math.sin(a), w[1] - dx * math.sin(a) + dy * math.cos(a))
+        pencil(L, [B(*R(-0.055, 0.0)) + ('c',), B(*R(0.055, 0.0)) + ('c',), B(*R(0.062, 0.25)) + ('c',), B(*R(-0.050, 0.26)) + ('c',)], 2.2, closed=True, taper=(0, 0))
+        for k, (fx, ln_) in enumerate(((-0.035, 0.15), (-0.005, 0.17), (0.025, 0.16), (0.055, 0.13))):
+            pencil(L, P([R(fx, 0.26), R(fx + 0.012, 0.26 + ln_ * 0.6), R(fx + 0.035, 0.26 + ln_)]), 1.6, op=0.6)
+        pencil(L, P([R(0.05, 0.08), R(0.085, 0.17), R(0.075, 0.25)]), 1.8, op=0.7)   # thumb
     pencil(L, P([(-0.135, 6.10), (0.0, 6.10), (0.03, 6.30), (-0.065, 6.37), (-0.165, 6.30)]), 2.2, closed=True, taper=(0, 0))
     pencil(L, P([(0.195, 6.06), (0.32, 6.06), (0.385, 6.27), (0.33, 6.35), (0.20, 6.27)]), 2.2, closed=True, taper=(0, 0))
     # balance: plumb line from the pit of the neck

@@ -1,18 +1,21 @@
 # Cardigan girl: self-critique
 
 Judged like any illustration, with the Aoi design sheet as the professional bar (about 9/10).
-Scores are my own assessment.
+Scores are my own assessment. The third column is after the user's seven notes (see `LESSONS.md`).
 
-| Area | First try (scrapped) | Redraw | What still falls short |
-|---|---|---|---|
-| Proportion and balance | 3 | 7 | 6.35 heads and the weight ankle sits under the pit of the neck. The legs still read long and tube-like, and the knees have almost no anatomy. |
-| Gesture | 2 | 4 | A stiff design-sheet pose. Only the head tilt, the knees turning in and the angled forearms give it life. Aoi's slight lean and dropped shoulders feel human; this does not yet. |
-| Face | 4 | 7 | The book's eye method reads well and the face is appealing. It is generic: neutral expression, flat eye whites, a tiny mouth. |
-| Hair | 2 | 6 | The bell-shaped bob with swept bangs reads correctly. The shine band is too evenly spaced, and there are no thin see-through strands like the ones that make Aoi's hair airy. |
-| Clothing and folds | 3 | 6 | Cardigan, rib cuffs, placket, button skirt and loafers all read. The cardigan folds are soft stripes rather than folds pulled from tension points, so the knit has no weight. The hands hide in sweater paws, which dodges the hardest part. |
-| Line | 3 | 5 | Tapered, colour-matched lines and a heavier outer contour. Still mechanical: every curve is perfectly smooth, with no breaks where the light hits and none of the sketchy energy of the Aoi sheet. |
-| Colour and value | 4 | 7 | Cohesive palette, one light source from the upper left, cast shadows computed from the real shapes, a clear value read. Only one shadow tone per material and no bounce light. |
-| **Overall** | **3** | **6** | It is clearly anime and coherent now, but it reads as clean vector-style art, not a hand-painted design sheet. |
+| Area | First try | Redraw | After your notes | What still falls short |
+|---|---|---|---|---|
+| Proportion and balance | 3 | 7 | 8 | The knee now sits at 0.71 of the height, like the Aoi sheet and the book. The torso is still a little long for her height. |
+| Gesture | 2 | 4 | 5 | The relaxed hands help, but it is still a stiff design-sheet stance with no weight shift through the shoulders. |
+| Face | 4 | 7 | 8 | Fuller cheeks, a gradient iris with reflections and hatching, and lash flicks. The expression is still neutral and generic. |
+| Hair | 2 | 6 | 7 | Cel shadows shaped like strands, long highlight strands, and fine pointed ends. The dark strands under the jaw read a little like spikes. |
+| Hands and feet | 1 | 3 | 6 | Hands are built with the book's wedge-and-segments method, and the feet sit inside the loafers. Finger joints and knuckles are only implied. |
+| Clothing and folds | 3 | 6 | 7 | The sleeves now show compression, half-lock and hanging folds. Cardigan body folds are still soft stripes. |
+| Line | 3 | 5 | 5 | Tapered lines and a heavier outer contour. Lines are still mechanical, with no light-side thinning or broken lines. |
+| Colour and value | 4 | 7 | 7 | One light source, computed cast shadows, a clear value read. Still one shadow tone per material and no bounce light. |
+| **Overall** | **3** | **6** | **7** | Clearly anime and coherent, but it reads as clean vector-style art rather than a hand-painted design sheet. |
+
+`fixes_closeups.png` shows each of the seven notes before and after, and `fixes_before_after.png` shows the whole figure.
 
 ## How it was made
 - `engine.py` is a small raster paint engine: pressure-tapered brush strokes, polygon fills, layers with normal, lock-alpha, multiply and screen modes, and blur.
@@ -23,7 +26,7 @@ Scores are my own assessment.
 ## What I would fix next
 1. Gesture: a real weight shift through the shoulders, and one hand doing something.
 2. Line: thin on the lit side, heavy in shadow, and broken where the light hits.
-3. Hair: irregular shine shapes and a few stray strands.
-4. Folds: start each fold from a tension point (shoulder, elbow, button) per the book's clothing chapter.
+3. Hair: lighter, more varied strands behind the neck instead of dark spikes.
+4. Folds: pull the cardigan body folds from tension points (shoulder, buttons) like the sleeves now do.
 
 `LESSONS.md` logs every part that was scrapped and the rule learned from it.

@@ -31,69 +31,104 @@ def F(mode, col):
     return C['white'] if mode == 'line' else col
 
 # ------------------------------------------------------------------ legs + shoes
-LEG_L_OUT = [(-0.47, 3.26), (-0.458, 3.55), (-0.425, 3.95), (-0.368, 4.40), (-0.296, 4.80), (-0.262, 4.97), (-0.252, 5.07),
-             (-0.274, 5.28), (-0.252, 5.60), (-0.192, 5.95), (-0.150, 6.14)]
-LEG_L_IN = [(-0.02, 3.64), (-0.026, 3.95), (-0.040, 4.40), (-0.046, 4.80), (-0.030, 4.96), (-0.030, 5.10), (-0.008, 5.30),
-            (-0.014, 5.62), (0.0, 5.95), (0.004, 6.14)]
-LEG_R_OUT = [(0.47, 3.32), (0.458, 3.60), (0.425, 4.00), (0.365, 4.45), (0.290, 4.84), (0.256, 5.00), (0.258, 5.11),
-             (0.300, 5.32), (0.320, 5.62), (0.332, 5.92), (0.338, 6.10)]
-LEG_R_IN = [(0.02, 3.64), (0.026, 3.95), (0.036, 4.40), (0.031, 4.80), (0.013, 4.99), (0.023, 5.12), (0.062, 5.35),
-            (0.128, 5.68), (0.170, 5.95), (0.184, 6.10)]
+# each leg is an axis (hip joint -> knee -> ankle) with a width profile (outer, inner half-widths)
+LEG_AXIS = {'L': (HIP_L, KNE_L, ANK_L, -1), 'R': (HIP_R, KNE_R, ANK_R, +1)}
+THIGH = [(0.00, 0.230, 0.215), (0.30, 0.215, 0.186), (0.50, 0.200, 0.172), (0.70, 0.178, 0.156), (0.87, 0.150, 0.136),
+         (1.00, 0.124, 0.118)]
+SHIN = [(0.00, 0.124, 0.118), (0.07, 0.120, 0.110), (0.20, 0.140, 0.121), (0.33, 0.137, 0.130), (0.50, 0.118, 0.113),
+        (0.70, 0.096, 0.090), (0.88, 0.079, 0.074), (0.96, 0.075, 0.074), (1.00, 0.073, 0.071), (1.06, 0.078, 0.076),
+        (1.12, 0.086, 0.082)]                       # past 1.0 = the top of the foot, hidden inside the shoe
 
-def leg_path(out, inn):
-    return bp(out + list(reversed(inn)))
+def leg_geometry(name):
+    hip, knee, ank, so = LEG_AXIS[name]
+    outer, inner, axis = [], [], []
+    for (p0, p1, prof, smax) in ((hip, knee, THIGH, 1.0), (knee, ank, SHIN, 1.12)):
+        dx, dy = p1[0] - p0[0], p1[1] - p0[1]; L_ = math.hypot(dx, dy); ux, uy = dx / L_, dy / L_
+        nx, ny = uy, -ux                            # normal pointing to the viewer's right of the axis direction
+        if nx * so < 0: nx, ny = -nx, -ny           # make it point to the leg's outer side
+        ss = np.linspace(0, smax, 40)
+        wo = np.interp(ss, [q[0] for q in prof], [q[1] for q in prof])
+        wi = np.interp(ss, [q[0] for q in prof], [q[2] for q in prof])
+        for s, o, i in zip(ss, wo, wi):
+            cx_, cy_ = p0[0] + dx * s, p0[1] + dy * s
+            outer.append((cx_ + nx * o, cy_ + ny * o)); inner.append((cx_ - nx * i, cy_ - ny * i)); axis.append((cx_, cy_))
+    return outer, inner, axis
 
 def draw_legs(L, mode):
     ms = []
-    for out, inn, name in ((LEG_R_OUT, LEG_R_IN, 'R'), (LEG_L_OUT, LEG_L_IN, 'L')):   # free leg behind the weight leg
-        p = leg_path(out, inn); m = p.mask(); ms.append(m)
+    for name in ('R', 'L'):                         # free leg behind the weight leg
+        outer, inner, axis = leg_geometry(name)
+        poly_pts = np.asarray(Bs(outer) + Bs(inner[::-1]))
+        m = poly(poly_pts); ms.append(m)
         L.paint(m, F(mode, P_['tight']))
+        so = LEG_AXIS[name][3]
         if SHADE(mode):
-            # denier sheen: skin shows through where the knit stretches over the front of the leg
-            k = 0 if name == 'L' else 1
-            ctr = [lerp(out[i], inn[min(i, len(inn) - 1)], 0.42) for i in range(len(out))]
-            sheen = line(Bs(ctr[2:-1]), 0.11 * HU, taper=(0.25, 0.25), floor=0.3).blur(10) & m
+            # denier sheen down the front of the leg, a little toward the light; brighter on the knee
+            sheen_pts = [(x - 0.035, y) for x, y in axis[20:74]]
+            sheen = line(Bs(sheen_pts), 0.10 * HU, taper=(0.25, 0.25), floor=0.3).blur(10) & m
             L.paint(sheen, P_['tight_sheen'], 0.75)
-            kn = ctr[5]
-            L.paint(ellipse(*B(kn[0], kn[1] + 0.01), 0.05 * HU, 0.07 * HU).blur(8) & m, P_['tight_sheen'], 0.55)
+            kx, ky = LEG_AXIS[name][1]
+            L.paint(ellipse(*B(kx - 0.02, ky + 0.01), 0.05 * HU, 0.065 * HU).blur(8) & m, P_['tight_sheen'], 0.55)
             L.paint(form_shadow(m, 0.075), P_['tight_sh'], 0.85, mode='multiply')
-        n = len(out)
-        edge(L, p, 0, n - 1, 4.2, P_['tight_ln'], taper=(0.0, 0.05))
-        edge(L, p, n, 2 * n - 1, 3.6, P_['tight_ln'], taper=(0.05, 0.0))
-        # knee hint
-        kx, ky = out[5]; ix, iy = inn[4]
-        ln(L, [lerp((kx, ky), (ix, iy), 0.35), lerp((kx, ky), (ix, iy), 0.5), lerp((kx, ky), (ix, iy), 0.65)], 1.6,
-           P_['tight_ln'] * 0.4 + P_['tight_sheen'] * 0.6, taper=(0.4, 0.4), op=0.8)
+        n = len(outer)
+        L.paint(stroke(np.asarray(Bs(outer[18:n - 6])), 4.2, taper=(0.0, 0.05), floor=0.3), P_['tight_ln'])
+        L.paint(stroke(np.asarray(Bs(inner[18:n - 6])), 3.6, taper=(0.0, 0.05), floor=0.3), P_['tight_ln'])
+        # knee: a small curve under the kneecap
+        kx, ky = LEG_AXIS[name][1]
+        ln(L, [(kx - 0.045, ky + 0.035), (kx - 0.01, ky + 0.052), (kx + 0.03, ky + 0.040)], 1.7,
+           P_['tight_ln'] * 0.4 + P_['tight_sheen'] * 0.6, taper=(0.4, 0.4), op=0.85)
     return ms
 
-def draw_shoes(L, mode):
-    for ank, ang, name in ((ANK_R, -24, 'R'), (ANK_L, 3, 'L')):
-        ax, ay = ank
-        def T(p):
-            x, y = p; a = math.radians(ang)
-            return (ax + x * math.cos(a) - y * math.sin(a), ay + x * math.sin(a) + y * math.cos(a))
-        # outline: narrow at the ankle, widest at the toe box, rounded toe
-        body = [(-0.074, -0.005), (-0.090, 0.07), (-0.112, 0.15), (-0.118, 0.200), (-0.090, 0.236), (-0.040, 0.250), (0.0, 0.252),
-                (0.040, 0.250), (0.090, 0.236), (0.118, 0.200), (0.112, 0.15), (0.090, 0.07), (0.074, -0.005)]
-        p = bp([T(q) for q in body]); m = p.mask()
-        L.paint(m, F(mode, P_['shoe']))
-        # inside of the shoe behind the U-shaped opening
-        inside = bp([T(q) for q in [(-0.072, 0.0), (-0.05, 0.035), (0.0, 0.052), (0.05, 0.035), (0.072, 0.0), (0.0, 0.012)]])
-        L.paint(inside.mask(), F(mode, P_['sole']))
-        sole = bp([T(q) for q in [(-0.117, 0.205), (-0.088, 0.240), (0.0, 0.256), (0.088, 0.240), (0.117, 0.205),
-                                  (0.119, 0.226), (0.090, 0.262), (0.0, 0.276), (-0.090, 0.262), (-0.119, 0.226)]])
-        L.paint(sole.mask(), F(mode, P_['sole']))
+SHOE_ANG = {'L': 4, 'R': -26}
+SHOE_SIL = [(-0.100, 0.030), (-0.090, 0.002), (-0.050, -0.012), (0.0, -0.016), (0.050, -0.012), (0.090, 0.002), (0.100, 0.030),
+            (0.108, 0.10), (0.118, 0.17), (0.120, 0.215), (0.100, 0.250), (0.055, 0.268), (0.0, 0.272), (-0.055, 0.268),
+            (-0.100, 0.250), (-0.120, 0.215), (-0.118, 0.17), (-0.108, 0.10)]
+SHOE_OPEN = [(-0.088, 0.034), (-0.060, 0.012), (0.0, 0.004), (0.060, 0.012), (0.088, 0.034), (0.060, 0.064), (0.0, 0.076), (-0.060, 0.064)]
+SHOE_VAMP = [(-0.1025, 0.050, 'c'), (-0.064, 0.076), (0.0, 0.088), (0.064, 0.076), (0.1025, 0.050, 'c'), (0.108, 0.10), (0.118, 0.17),
+             (0.120, 0.215), (0.100, 0.250), (0.055, 0.268), (0.0, 0.272), (-0.055, 0.268), (-0.100, 0.250), (-0.120, 0.215),
+             (-0.118, 0.17), (-0.108, 0.10)]
+SHOE_SOLE = [(-0.119, 0.222), (-0.100, 0.252), (-0.055, 0.270), (0.0, 0.274), (0.055, 0.270), (0.100, 0.252), (0.119, 0.222),
+             (0.121, 0.240), (0.102, 0.270), (0.056, 0.286), (0.0, 0.290), (-0.056, 0.286), (-0.102, 0.270), (-0.121, 0.240)]
+
+def shoe_T(name):
+    ax, ay = (ANK_L if name == 'L' else ANK_R)
+    a = math.radians(SHOE_ANG[name]); c, s = math.cos(a), math.sin(a)
+    return lambda p: (ax + p[0] * c - p[1] * s, ay + p[0] * s + p[1] * c) + tuple(p[2:])
+
+def draw_shoes_back(L, mode):
+    """heel counter + dark lining, drawn BEFORE the leg so the leg goes into the shoe"""
+    for name in ('R', 'L'):
+        T = shoe_T(name)
+        sil = bp([T(q) for q in SHOE_SIL]); sm = sil.mask()
+        L.paint(sm, F(mode, P_['shoe']))
         if SHADE(mode):
-            L.paint(form_shadow(m, 0.05), P_['shoe_sh'], 0.9, mode='multiply')
-            L.paint(lin_grad(m, B(*T((0, 0.09))), B(*T((0, 0.03)))), P_['shoe_sh'], 0.7, mode='multiply')
-            shine = bp([T(q) for q in [(-0.085, 0.165), (-0.06, 0.150), (-0.03, 0.152), (-0.04, 0.172), (-0.075, 0.190)]]).mask().blur(0.8)
-            L.paint(shine & m, P_['shoe_hl'], 0.9)
-        edge(L, p, 0, len(body) - 1, 3.8, P_['shoe_ln'], taper=(0.1, 0.1))
-        edge(L, sole, 5, 9, 3.4, P_['shoe_ln'], taper=(0.05, 0.05))
-        edge(L, inside, 0, 4, 2.6, P_['shoe_ln'], taper=(0.1, 0.1))
-        ln(L, [T(q) for q in [(-0.100, 0.108), (-0.05, 0.128), (0.0, 0.133), (0.05, 0.128), (0.100, 0.108)]], 2.4, P_['shoe_ln'], taper=(0.15, 0.15))
-        ln(L, [T(q) for q in [(-0.095, 0.132), (-0.05, 0.152), (0.0, 0.157), (0.05, 0.152), (0.095, 0.132)]], 1.8, P_['shoe_ln'], taper=(0.2, 0.2), op=0.7)
-        ln(L, [T(q) for q in [(-0.026, 0.138), (0.0, 0.142), (0.026, 0.138)]], 2.2, P_['shoe_ln'], taper=(0.3, 0.3))
+            L.paint(form_shadow(sm, 0.05), P_['shoe_sh'], 0.9, mode='multiply')
+        op = bp([T(q) for q in SHOE_OPEN]); L.paint(op.mask(), F(mode, P_['sole']))
+        edge(L, sil, 0, 6, 3.4, P_['shoe_ln'], taper=(0.1, 0.1))
+        edge(L, op, 0, 4, 2.4, P_['shoe_ln'], taper=(0.1, 0.1))
+
+def draw_shoes_front(L, mode):
+    """vamp, toe box and sole, drawn AFTER the leg: its top edge (the throat) crosses in front of the foot"""
+    for name in ('R', 'L'):
+        T = shoe_T(name)
+        vamp = bp([T(q) for q in SHOE_VAMP]); vm = vamp.mask()
+        L.paint(vm, F(mode, P_['shoe']))
+        sole = bp([T(q) for q in SHOE_SOLE]); L.paint(sole.mask(), F(mode, P_['sole']))
+        if SHADE(mode):
+            L.paint(form_shadow(vm, 0.05), P_['shoe_sh'], 0.9, mode='multiply')
+            L.paint(lin_grad(vm, B(*T((0, 0.13))), B(*T((0, 0.06)))), P_['shoe_sh'], 0.55, mode='multiply')   # under the strap
+            shine = bp([T(q) for q in [(-0.090, 0.180), (-0.068, 0.165), (-0.036, 0.168), (-0.048, 0.188), (-0.080, 0.205)]]).mask().blur(0.8)
+            L.paint(shine & vm, P_['shoe_hl'], 0.95)
+        n = len(SHOE_VAMP)
+        edge(L, vamp, 0, 4, 2.8, P_['shoe_ln'], taper=(0.1, 0.1))                 # throat across the foot
+        edge(L, vamp, 4, n, 3.8, P_['shoe_ln'], taper=(0.05, 0.05))              # sides and toe
+        edge(L, sole, 7, 13, 3.4, P_['shoe_ln'], taper=(0.05, 0.05))
+        edge(L, sole, 0, 6, 1.8, P_['shoe_ln'], taper=(0.1, 0.1), op=0.8)
+        # penny strap + slit, moc-toe apron seam
+        ln(L, [T(q) for q in [(-0.104, 0.108), (-0.05, 0.124), (0.0, 0.128), (0.05, 0.124), (0.104, 0.108)]], 2.2, P_['shoe_ln'], taper=(0.15, 0.15))
+        ln(L, [T(q) for q in [(-0.108, 0.140), (-0.05, 0.156), (0.0, 0.160), (0.05, 0.156), (0.108, 0.140)]], 2.0, P_['shoe_ln'], taper=(0.15, 0.15), op=0.85)
+        ln(L, [T(q) for q in [(-0.022, 0.142), (0.0, 0.135), (0.022, 0.142), (0.0, 0.149), (-0.022, 0.142)]], 1.8, P_['shoe_ln'], taper=(0.0, 0.0))
+        ln(L, [T(q) for q in [(-0.086, 0.165), (-0.070, 0.215), (0.0, 0.236), (0.070, 0.215), (0.086, 0.165)]], 1.6, P_['shoe_ln'], taper=(0.3, 0.3), op=0.7)
 
 # ------------------------------------------------------------------ skin torso (neck + chest)
 NECK = [(-0.138, 0.84), (-0.137, 1.00), (-0.148, 1.13), (-0.18, 1.22), (-0.30, 1.29), (-0.48, 1.38), (-0.46, 1.72),
@@ -249,49 +284,182 @@ SLV = {   # forearms angle in so the hands rest beside the thighs (references: A
          [(0.472, 1.74), (0.466, 1.98), (0.462, 2.38), (0.424, 2.80), (0.390, 3.13)]),
 }
 
+# ------------------------------------------------------------------ hands (book p.52-55)
+# a wedge-shaped palm block + fingers whose segments shrink by 2/3, curling a little more from index to pinky.
+# Built in 3D (u: down the hand, v: toward the palm, w: toward the thumb), projected orthographically.
+HAND_SCALE = 1.1
+FINGERS = [   # name, knuckle (u, v, w), segment lengths, base/tip radius, splay (deg), flex at the three joints (deg)
+    ('pinky',  (0.215, 0.000, -0.055), (0.080, 0.054, 0.038), 0.0170, 0.0132, -9, (34, 54, 28)),
+    ('ring',   (0.233, -0.004, -0.019), (0.100, 0.067, 0.045), 0.0200, 0.0155, -4, (28, 46, 24)),
+    ('middle', (0.240, -0.006, 0.021), (0.106, 0.071, 0.047), 0.0210, 0.0162, 0, (22, 38, 20)),
+    ('index',  (0.230, -0.004, 0.060), (0.100, 0.067, 0.045), 0.0205, 0.0160, 5, (15, 30, 18)),
+]
+PALM_PTS = [(0.215, 0.030, 0.040, 0.018), (0.222, 0.030, 0.000, 0.018), (0.205, 0.028, -0.040, 0.018),
+            (0.090, 0.035, 0.060, 0.030), (0.120, 0.022, -0.050, 0.026), (0.060, 0.030, 0.062, 0.026),
+            (0.135, 0.040, 0.078, 0.025)]
+
+def finger_chain(mcp, segs, splay, flex):
+    a = math.radians(splay)
+    d = np.array([math.cos(a), 0.0, math.sin(a)])
+    p = np.array(mcp, float); pts = [p.copy()]
+    for seg, fl in zip(segs, flex):
+        vp = np.array([0.0, 1.0, 0.0]) - d * d[1]; vp /= np.linalg.norm(vp)
+        t = math.radians(fl); d = math.cos(t) * d + math.sin(t) * vp; d /= np.linalg.norm(d)
+        p = p + d * seg; pts.append(p.copy())
+    return np.array(pts)
+
+def hand_parts():
+    parts = []
+    for name, mcp, segs, r0, r1, splay, flex in FINGERS:
+        pts = finger_chain(mcp, segs, splay, flex)
+        parts.append((name, pts, np.linspace(r0, r1, len(pts))))
+    tp = [np.array([0.135, 0.040, 0.078])]                      # thumb: from its knuckle, curling toward the index
+    for seg, dvec in ((0.062, (0.86, 0.36, -0.12)), (0.050, (0.74, 0.58, -0.22))):
+        dv = np.array(dvec, float); dv /= np.linalg.norm(dv); tp.append(tp[-1] + dv * seg)
+    parts.append(('thumb', np.array(tp), np.array([0.025, 0.021, 0.018])))
+    return parts
+
+def convex_hull(P):
+    P = sorted(set(map(tuple, np.round(P, 3))))
+    if len(P) < 3:
+        return np.array(P)
+    def cross(o, a, b): return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, up = [], []
+    for p in P:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0: lo.pop()
+        lo.append(p)
+    for p in reversed(P):
+        while len(up) >= 2 and cross(up[-2], up[-1], p) <= 0: up.pop()
+        up.append(p)
+    return np.array(lo[:-1] + up[:-1])
+
+def draw_hand(L, mode, side, wrist, alpha, theta=38.0):
+    """relaxed hanging hand, palm toward the thigh, back of the hand turned a little toward the viewer"""
+    IN = -side
+    th = math.radians(theta); c, s = math.cos(th), math.sin(th)
+    ca, sa = math.cos(alpha), math.sin(alpha)
+    def proj(P):
+        P = np.asarray(P, float) * HAND_SCALE
+        u, v, w = P[..., 0], P[..., 1], P[..., 2]
+        x = IN * (c * v + s * w); y = u; z = -s * v + c * w
+        X = wrist[0] + x * ca - y * sa; Y = wrist[1] + x * sa + y * ca
+        return np.stack([CX + X * HU, Y0 + Y * HU], -1), z
+    lw = 2.7
+    def hull_mask(centers, radii, grow=0.0):
+        ring = []
+        for (px, py), r in zip(centers, radii):
+            for t in np.linspace(0, 2 * math.pi, 20, endpoint=False):
+                ring.append((px + math.cos(t) * (r + grow), py + math.sin(t) * (r + grow)))
+        return poly(convex_hull(np.array(ring)))
+    # palm block: wrist cross-section + knuckles + palm pads + thumb base
+    pp3 = [(-0.03, 0.029 * math.sin(t) - 0.003, 0.048 * math.cos(t), 0.006) for t in np.linspace(0, 2 * math.pi, 10, endpoint=False)]
+    pp3 += [(m[0], m[1], m[2], r0 + 0.003) for _, m, _, r0, _, _, _ in FINGERS] + list(PALM_PTS)
+    pc, _ = proj([q[:3] for q in pp3]); pr = [q[3] * HAND_SCALE * HU for q in pp3]
+    palm = hull_mask(pc, pr); palm_ink = hull_mask(pc, pr, lw)
+    palm_core = Mask(palm.x0, palm.y0, np.clip((palm.blur(3).a - 0.9) * 10, 0, 1))
+    ink_col = C['skin_ln']
+    L.paint(palm_ink, ink_col); L.paint(palm, F(mode, C['skin']))
+    if SHADE(mode):
+        L.paint(form_shadow(palm, 0.03), C['skin_sh'], 0.9, mode='multiply')
+    hand_all = [palm]
+    parts = []
+    for name, pts, radii in hand_parts():
+        p2, z = proj(pts)
+        parts.append((float(np.mean(z)), name, p2, radii * HAND_SCALE * HU))
+    for _, name, p2, rpx in sorted(parts, key=lambda q: q[0]):          # far fingers first
+        m = capsules(p2, rpx); ink = capsules(p2, rpx + lw) - palm_core
+        L.paint(ink, ink_col); L.paint(m, F(mode, C['skin']))
+        hand_all.append(m)
+        if SHADE(mode):
+            L.paint(form_shadow(m, 0.012), C['skin_sh'], 0.9, mode='multiply')
+            L.paint(lin_grad(m, tuple(p2[1]), tuple(p2[-1])), C['skin_sh'], 0.55, mode='multiply')   # curl turns away
+        if name in ('index', 'middle', 'thumb'):                                                     # nails
+            a_, b_ = p2[-2], p2[-1]
+            d = (b_ - a_) / (np.linalg.norm(b_ - a_) + 1e-6)
+            ctr = a_ + (b_ - a_) * 0.62 - np.array([d[1], -d[0]]) * rpx[-1] * 0.15 * IN
+            ang = math.degrees(math.atan2(d[1], d[0]))
+            nl, nw = np.linalg.norm(b_ - a_) * 0.36, rpx[-1] * 0.62
+            nail = ellipse(ctr[0], ctr[1], nl, nw, ang) & m
+            rim = (ellipse(ctr[0], ctr[1], nl, nw, ang) - ellipse(ctr[0], ctr[1], nl - 1.4, nw - 1.4, ang)) & m
+            L.paint(nail, rgb('#fde4de') if mode != 'line' else C['white'], 0.95)
+            L.paint(rim, C['skin_ln'], 0.55)
+    return union(*hand_all)
+
+def sleeve_fold_lists(out, inn, IN, folds):
+    """insert small notches into the sleeve contours where a fold starts (fabric dents in, bulges below)"""
+    def notch(pts, y0, inward):
+        xs = [q[1] for q in pts]
+        xo = lambda y: float(np.interp(y, xs, [q[0] for q in pts]))
+        keep = [q for q in pts if abs(q[1] - y0) > 0.045 or q is pts[0] or q is pts[-1]]
+        new = [(xo(y0 - 0.03), y0 - 0.03), (xo(y0) + inward * 0.011, y0), (xo(y0 + 0.035) - inward * 0.005, y0 + 0.035)]
+        return sorted(keep + new, key=lambda q: q[1])
+    for y0, s0, y1, s1, kind in folds:
+        if kind != 'z' or y0 > out[-1][1] - 0.06 or y0 < 1.75:
+            continue
+        if s0 == 0.0:
+            out = notch(out, y0, IN)
+        elif s0 == 1.0:
+            inn = notch(inn, y0, -IN)
+    return out, inn
+
+SLEEVE_FOLDS = [   # (y start, s start, y end, s end, kind); s: 0 = outer contour, 1 = inner contour
+    (1.70, 0.20, 2.12, 0.24, 'drape'), (1.74, 0.62, 2.02, 0.70, 'drape'),
+    (1.84, 1.0, 1.99, 0.50, 'z'), (2.06, 0.0, 2.17, 0.46, 'z'),
+    (2.36, 1.0, 2.30, 0.56, 'lock'), (2.42, 1.0, 2.41, 0.42, 'lock'), (2.47, 1.0, 2.55, 0.52, 'lock'),
+    (2.40, 0.0, 2.46, 0.30, 'z'),
+    (2.62, 0.0, 2.71, 0.62, 'z'), (2.72, 1.0, 2.81, 0.42, 'z'), (2.83, 0.0, 2.92, 0.60, 'z'), (2.93, 1.0, 3.01, 0.45, 'z'),
+    (3.03, 0.0, 3.09, 0.55, 'z'),
+]
+
 def draw_arm(L, mode, side):
-    out, inn = SLV[side]
+    out0, inn0 = SLV[side]
     IN = -side                                     # unit direction toward the body centre
-    ytop = out[-1][1]                              # cuff top
-    co, ci = out[-1][0], inn[-1][0]                # outer / inner x at the cuff top
-    slant = ((out[-1][0] - out[-2][0]) / (out[-1][1] - out[-2][1]) + (inn[-1][0] - inn[-2][0]) / (inn[-1][1] - inn[-2][1])) / 2
+    ytop = out0[-1][1]                             # cuff top
+    co, ci = out0[-1][0], inn0[-1][0]              # outer / inner x at the cuff top
+    slant = ((out0[-1][0] - out0[-2][0]) / (out0[-1][1] - out0[-2][1]) + (inn0[-1][0] - inn0[-2][0]) / (inn0[-1][1] - inn0[-2][1])) / 2
     yb = ytop + 0.14                               # cuff bottom
     sb = slant * 0.14                              # horizontal drift of the cuff bottom along the forearm
     cx = (co + ci) / 2 + sb
-    # ---- hand: hidden in the cuff, only curled fingertips and the thumb tip peek out
-    H_ = lambda q: (cx + IN * q[0], yb + q[1])
-    tips = [(-0.050, 0.046, 0.026), (-0.020, 0.058, 0.027), (0.012, 0.060, 0.027), (0.042, 0.050, 0.025)]   # x, depth, half-width
-    for x0, d, hw in tips:
-        f = bp([H_(q) for q in [(x0 - hw, -0.03), (x0 - hw * 1.02, d * 0.55), (x0 - hw * 0.62, d * 0.95), (x0, d * 1.06),
-                                (x0 + hw * 0.62, d * 0.95), (x0 + hw * 1.02, d * 0.55), (x0 + hw, -0.03)]])
-        fm = f.mask(); L.paint(fm, F(mode, C['skin']))
-        if SHADE(mode):
-            L.paint(lin_grad(fm, B(cx, yb + d * 0.6), B(cx, yb - 0.01)), C['skin_sh'], 0.9, mode='multiply')
-        edge(L, f, 1, 6, 2.5, C['skin_ln'], taper=(0.3, 0.3))
-    th = bp([H_(q) for q in [(0.050, -0.03), (0.084, 0.0), (0.094, 0.045), (0.078, 0.072), (0.056, 0.060), (0.048, 0.02)]])
-    thm = th.mask(); L.paint(thm, F(mode, C['skin']))
-    if SHADE(mode):
-        L.paint(form_shadow(thm, 0.015), C['skin_sh'], 0.9, mode='multiply')
-    edge(L, th, 0, 5, 2.4, C['skin_ln'], taper=(0.2, 0.3))
-    # ---- sleeve tube
+    # ---- hand first: the cuff covers the wrist
+    alpha = -math.atan(slant) - IN * math.radians(6)
+    hand = draw_hand(L, mode, side, (cx - 0.035 * math.sin(-alpha), yb - 0.035), alpha)
+    # ---- sleeve tube with fold notches in the contour
+    out, inn = sleeve_fold_lists(list(out0), list(inn0), IN, SLEEVE_FOLDS)
+    xo = lambda y: float(np.interp(y, [q[1] for q in out], [q[0] for q in out]))
+    xi = lambda y: float(np.interp(y, [q[1] for q in inn], [q[0] for q in inn]))
+    def sp(y, s_):
+        if y < inn[0][1]:                          # above the armpit: measure across to the seam side
+            return (xo(y) + s_ * IN * 0.20, y)
+        return (xo(y) + s_ * (xi(y) - xo(y)), y)
     pts = out + list(reversed(inn))
     p = bp(pts); m = p.mask()
     L.paint(m, F(mode, P_['sage']))
     # ---- ribbed cuff: a little narrower; the sleeve blouses over it
     cuff = bp([(co + IN * 0.008, ytop - 0.012), (co + IN * 0.014 + sb * 0.5, ytop + 0.07), (co + IN * 0.020 + sb, yb),
                (ci - IN * 0.016 + sb, yb), (ci - IN * 0.010 + sb * 0.5, ytop + 0.07), (ci - IN * 0.004, ytop - 0.012)])
-    cm = cuff.mask(); L.paint(cm, F(mode, P_['sage']))
+    cm = cuff.mask()
+    if SHADE(mode):                                # the cuff casts a soft shadow on the back of the hand
+        L.paint((cm.shift(0.006 * HU, 0.028 * HU).blur(3) & hand) - cm, C['skin_sh2'], 0.8, mode='multiply')
+    L.paint(cm, F(mode, P_['sage']))
     if SHADE(mode):
         L.paint(form_shadow(m, 0.085), P_['sage_sh'], 0.9, mode='multiply')
         L.paint(form_shadow(cm, 0.06), P_['sage_sh'], 0.9, mode='multiply')
         L.paint(lin_grad(cm, B(0, ytop + 0.045), B(0, ytop - 0.005)), P_['sage_sh'], 0.6, mode='multiply')
         if side > 0:
             L.paint(m, P_['sage_sh'], 0.35, mode='multiply')
-        for y0, ln_ in ((2.37, 0.085), (2.49, 0.11)):        # elbow folds on the inner side
-            x0 = np.interp(y0, [q[1] for q in inn], [q[0] for q in inn])
-            w = line(Bs([(x0, y0), (x0 - IN * ln_ * 0.5, y0 + 0.02), (x0 - IN * ln_, y0 + 0.035)]), 0.026 * HU, taper=(0.1, 0.9)).blur(2)
-            L.paint(w & m, P_['sage_sh'], 0.8, mode='multiply')
-        L.paint(ellipse(*B(out[4][0] + IN * 0.06, 2.10), 0.035 * HU, 0.24 * HU).blur(12) & m, P_['sage_hl'], 0.35)
+        L.paint(ellipse(*B(out0[4][0] + IN * 0.06, 2.10), 0.035 * HU, 0.24 * HU).blur(12) & m, P_['sage_hl'], 0.35)
+        # fold shading: the fabric below each fold line turns away from the light; a light ridge above it
+        for y0, s0, y1, s1, kind in SLEEVE_FOLDS:
+            P0, P1 = sp(y0, s0), sp(y1, s1)
+            if kind == 'drape':
+                w = line(Bs([P0, lerp(P0, P1, 0.5), P1]), 0.035 * HU, taper=(0.6, 0.6)).blur(4)
+                L.paint(w & m, P_['sage_sh'], 0.6, mode='multiply')
+                continue
+            depth = 0.030 if kind == 'z' else 0.022
+            sh = poly(np.asarray(Bs([P0, P1, (P0[0], P0[1] + depth)]))).blur(2.5)
+            L.paint(sh & m, P_['sage_sh'], 0.85, mode='multiply')
+            hl = poly(np.asarray(Bs([(P0[0], P0[1] - 0.012), P1, P0]))).blur(1.5)
+            L.paint(hl & m, P_['sage_hl'], 0.35)
     n = len(out)
     edge(L, p, 1, n - 1, 3.8, P_['sage_ln'], taper=(0.1, 0.02))
     edge(L, p, n, len(pts) - 1, 3.2, P_['sage_ln'], taper=(0.02, 0.2))
@@ -301,14 +469,15 @@ def draw_arm(L, mode, side):
     for k in range(1, 8):
         x = co + IN * 0.02 + (ci - co - IN * 0.04) * k / 8
         ln(L, [(x + sb * 0.25, ytop + 0.035), (x + sb * 0.9, yb - 0.012)], 1.2, P_['sage_ln'], taper=(0.3, 0.3), op=0.45)
-    # folds: elbow (inner side, pointing out), gathers above the cuff, a drape line from the shoulder
-    for y0, ln_ in ((2.37, 0.085), (2.49, 0.11)):
-        x0 = np.interp(y0, [q[1] for q in inn], [q[0] for q in inn])
-        ln(L, [(x0, y0), (x0 - IN * ln_ * 0.5, y0 + 0.02), (x0 - IN * ln_, y0 + 0.035)], 2.0, P_['sage_ln'], taper=(0.05, 0.85))
-    ln(L, [(co + IN * 0.006, ytop - 0.09), (co + IN * 0.05, ytop - 0.055), (co + IN * 0.09, ytop - 0.065)], 1.8, P_['sage_ln'], taper=(0.05, 0.85), op=0.85)
-    ln(L, [(ci - IN * 0.006, ytop - 0.13), (ci - IN * 0.045, ytop - 0.09), (ci - IN * 0.085, ytop - 0.08)], 1.8, P_['sage_ln'], taper=(0.05, 0.85), op=0.85)
-    ln(L, [(out[3][0] + IN * 0.06, 1.70), (out[4][0] + IN * 0.065, 2.05), (out[4][0] + IN * 0.06, 2.24)], 1.6, P_['sage_ln'], taper=(0.6, 0.6), op=0.6)
+    # fold lines: thick where they leave the contour, tapering inside the sleeve
+    for y0, s0, y1, s1, kind in SLEEVE_FOLDS:
+        P0, P1 = sp(y0, s0), sp(y1, s1)
+        mid = lerp(P0, P1, 0.5); mid = (mid[0], mid[1] - 0.008)
+        if kind == 'drape':
+            ln(L, [P0, mid, P1], 1.6, P_['sage_ln'], taper=(0.6, 0.6), op=0.6)
+        else:
+            ln(L, [P0, mid, P1], 2.2 if kind == 'z' else 2.0, P_['sage_ln'], taper=(0.05, 0.85), op=0.9)
     # drop-shoulder seam across the top of the arm
-    ln(L, [(out[2][0] + IN * 0.01, out[2][1] + 0.01), (out[3][0] + IN * 0.09, 1.66), (inn[0][0] - IN * 0.005, inn[0][1] - 0.03)], 1.8,
+    ln(L, [(out0[2][0] + IN * 0.01, out0[2][1] + 0.01), (out0[3][0] + IN * 0.09, 1.66), (inn0[0][0] - IN * 0.005, inn0[0][1] - 0.03)], 1.8,
        P_['sage_ln'], taper=(0.3, 0.3), op=0.7)
     return m

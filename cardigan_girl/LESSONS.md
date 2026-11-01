@@ -32,3 +32,13 @@
 ## Full figure v3 — arms re-posed
 - Arms hung outside the hips with hands floating = stiff mannequin. Both references rest the hands beside the thighs. Rule: elbow near the waist, forearm angles in, cuff follows the forearm slant.
 - Outer silhouette had the same weight as interior lines. Book colour pages use a heavier outer contour. Rule: one ring that straddles the outer edge (1px in, ~1.6px out), so it merges with the existing line with no seam.
+
+## Round 2: the user's seven notes (all fixed)
+1. **A line crossed the iris.** The lower-lid stroke kept its old coordinates after the eye was enlarged. Rule: derive every dependent stroke from the current eye points. The lower lash line now sits on the white's bottom edge, outer half only.
+2. **Wrong hair shading on the far side.** A blurred "far side" blob made a smear with a hard vertical step. Rule (book p.25, p.111-112): cel shadow with hard edges, its boundary made of strand-shaped fingers along the flow. Shadows on a clump run diagonally along the strand and never cut straight across it.
+3. **Highlights were short spikes.** Rule: long comet-shaped strands, about 0.17-0.27 head long, widest near the top, bold on the lit side and dimmer on the far side.
+4. **Hair ends were a zig-zag blob.** Rule: hair ends in thin clumps that taper to fine points, and wisps grow out of the mass from a point, never from a flat cut.
+5. **Sleeves needed folds, and the fingertips looked like nubs.** Rule (book p.80-82): forearm compression folds alternate sides and dent the contour, half-lock folds sit at the inner elbow, and folds hang from the shoulder. Hands (book p.52-55) are a wedge palm plus fingers in 2/3 segments, curling a little more from index to pinky.
+6. **Shins too short.** The knee sat at 0.78 of the height. Rule: knee at about 0.71 of the height (Aoi sheet 0.70, book p.64-65 0.716), with the crotch at half the height.
+7. **Feet not inside the shoes.** The dark shoe opening was painted in front of the leg. Rule: paint the shoe's back (heel counter and lining), then the leg, then the shoe's front (vamp), so the leg enters the opening. The shoe is about 1.6 times as wide as the ankle.
+- **Cheeks:** the jaw was a straight V. Fuller cheeks that tuck into a small chin read cuter, as on the book's Miko.
