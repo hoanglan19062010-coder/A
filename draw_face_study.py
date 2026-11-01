@@ -176,8 +176,8 @@ def eye(pen, cx, flip, color):
 
 
 def features(pen, color):
-    eye(pen, CX - 12.5, False, color)
-    eye(pen, CX + 12.5, True, color)
+    eye(pen, CX - 11, False, color)
+    eye(pen, CX + 11, True, color)
     nose = SKIN_SHADE2 if color else LINE
     pen.line([(CX + 0.5, NOSE_Y - 1), (CX, NOSE_Y)], fill=nose)
     m = LIP if color else LINE
