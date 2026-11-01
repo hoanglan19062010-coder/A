@@ -86,17 +86,18 @@ def smooth(ctrl, n=8, closed=True):
 
 
 # Long back hair: smooth, full volume, ending in a few big soft clumps
-BACK_HAIR = smooth([(40, 7), (53, 8.5), (62, 13), (67, 22), (69, 36), (71, 52), (73, 68), (75, 82),
+BACK_HAIR = smooth([(40, 13), (51, 14.5), (59, 19), (63.5, 27), (65, 38), (67, 50), (70, 64), (73, 78),
                     (76, 92), (70, 88), (67, 97), (61, 89), (56, 95), (52, 86), (40, 86),
                     (28, 86), (24, 95), (19, 89), (13, 97), (10, 88), (4, 92),
-                    (5, 82), (7, 68), (9, 52), (11, 36), (13, 22), (18, 13), (27, 8.5)])
+                    (7, 78), (10, 64), (13, 50), (15, 38), (16.5, 27), (21, 19), (29, 14.5)])
 # Volume crown: smooth dome a bit wider than the skull
-CROWN = smooth([(40, 7.5), (52, 9), (60, 13.5), (64.5, 21), (66, 29), (65.5, 33), (40, 30), (14.5, 33),
-                (14, 29), (15.5, 21), (20, 13.5), (28, 9)])
+# hair hugging the cranium circle (centre 40,36 r 21) with ~2.5px of thickness
+CROWN = [(40 + 23.5 * math.cos(math.radians(a)), 35.5 + 23 * math.sin(math.radians(a)))
+         for a in range(180, 361, 4)] + [(63.5, 34), (40, 31), (16.5, 34)]
 # Bangs: soft curved clumps (root_l, root_r, tip_x, tip_y), part slightly right of centre
-BANGS = [(17, 25, 20, 47), (22, 30, 25, 43), (27, 35, 30.5, 46), (32, 39, 35, 42.5),
+BANGS = [(20.5, 25, 20, 47), (22, 30, 25, 43), (27, 35, 30.5, 46), (32, 39, 35, 42.5),
          (36, 43, 39.5, 46.5), (41, 47, 44, 43), (45, 52, 48.5, 46), (49.5, 56, 53, 42.5),
-         (54, 60.5, 56.5, 46), (57.5, 64, 61, 47.5)]
+         (54, 60.5, 56.5, 46), (57.5, 59.5, 61, 47.5)]
 # Side locks: gentle S-curve that frames the face and flips softly at the end
 SIDE_L = smooth([(16, 28), (22, 31), (24.5, 42), (23.5, 54), (21.5, 66), (22.5, 76), (20, 84),
                  (17.5, 77), (16.5, 66), (17.5, 54), (16, 42)])
@@ -234,7 +235,7 @@ def hair_front(pen, step):
     pen.poly(SIDE_L, fill=hf, outline=LINE)
     pen.poly(SIDE_R, fill=hf, outline=LINE)
     pen.poly(CROWN, fill=hf, outline=LINE)
-    pen.poly([(16, 21), (64, 21), (65, 30), (15, 30)], fill=hf)
+    pen.poly([(20.5, 25), (59.5, 25), (63, 32), (17, 32)], fill=hf)
     for c in BANGS:
         pen.poly(clump(*c), fill=hf)
     if color:
@@ -257,14 +258,16 @@ def hair_front(pen, step):
         pen.line(pts[len(pts) // 3:], fill=LINE)
     # strand flow from the part, curving with the dome
     flow = HAIR_SHADE if color else GUIDE_FAINT
-    for x in (20, 26, 32, 52, 58, 62):
-        pen.line(smooth([(44, 11), ((44 + x) / 2, 13.5 + abs(x - 44) * 0.15), (x, 27)], n=6, closed=False), fill=flow)
-    pen.line([(44, 9.5), (44, 20)], fill=LINE)
-    pen.line(smooth([(42, 10), (41, 6.5), (43, 4.5), (46, 5.5)], n=5, closed=False), fill=LINE)   # ahoge
+    for x in (21, 27, 33, 54, 59, 62):
+        side = -1 if x < 44 else 1
+        mid = (44 + side * 6 + x) / 2
+        pen.line(smooth([(44 + side * 0.5, 14), (mid, 16 + abs(x - 44) * 0.25), (x, 29)], n=6, closed=False), fill=flow)
+    pen.line([(44, 12.5), (44, 19)], fill=LINE)          # the part
+    pen.line(smooth([(43, 13), (42, 10), (43.5, 8), (46.5, 8.8)], n=5, closed=False), fill=LINE)   # ahoge
     if color:
         # angel-ring shine, broken into soft strands that follow the dome
-        box = pen.P([(20, 12), (60, 40)])
-        box2 = pen.P([(21.5, 13.5), (58.5, 40)])
+        box = pen.P([(19, 17), (61, 46)])
+        box2 = pen.P([(20.5, 18.5), (59.5, 46)])
         for a0, a1 in ((200, 228), (234, 262), (272, 300), (308, 338)):
             pen.d.arc((box[0][0], box[0][1], box[1][0], box[1][1]), a0, a1, fill=HAIR_HI, width=2)
             pen.d.arc((box2[0][0], box2[0][1], box2[1][0], box2[1][1]), a0 + 5, a1 - 7, fill=HAIR_SHINE)
@@ -284,8 +287,8 @@ def panel(img, ox, oy, step):
     # back hair + clothes
     if step >= 3:
         pen.poly(BACK_HAIR, fill=HAIR_SHADE if color else BG, outline=LINE)
-        strands = ([(12, 34), (11, 52), (11, 70), (10, 88)], [(15, 40), (14, 60), (15.5, 78), (14, 94)],
-                   [(9.5, 56), (8, 74), (7, 88)], [(18.5, 60), (19, 76), (20, 92)])
+        strands = ([(15, 40), (13.5, 56), (11.5, 72), (9.5, 88)], [(17.5, 46), (16, 62), (15, 78), (14, 94)],
+                   [(13, 60), (11, 75), (8.5, 88)], [(19, 62), (19, 78), (20, 92)])
         if color:
             pen.poly(smooth([(22, 56), (58, 56), (55, 86), (25, 86)], n=4), fill=HAIR_DEEP)
             for k, pts in enumerate(strands):
