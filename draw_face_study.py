@@ -367,10 +367,11 @@ def bang_clumps(lst):
 
 
 # ------------------------------------------------------------------ face features
-def eye(pen, cx, flip, color, scale=1.0, gaze=0.0):
+def eye(pen, cx, flip, color, scale=1.0, gaze=0.0, hair=False):
     """Anime eye. Shapes are measured in 'eye units' (E pixels each) and filled pixel by
     pixel, so the eye stays smooth at any resolution. scale squeezes it sideways (far eye on
-    a turned head); gaze slides the iris left/right (eye units)."""
+    a turned head); gaze slides the iris left/right (eye units). With hair=True the bangs
+    cover the brow and the lid crease, so those are left out."""
     s = -1 if flip else 1                       # +1: outer corner on the left
     ecx = pen.ox + cx * K                       # eye centre (screen px)
     top = pen.oy + (EYE_Y + 1) * K              # top of the opening (screen px)
@@ -382,13 +383,24 @@ def eye(pen, cx, flip, color, scale=1.0, gaze=0.0):
     irx, iry, icy = 6.5 * scale, 9, 9
     prx, pry, pcy = 3.1 * scale, 4.6, 7.5
 
+    uo, vo = -w + 0.3, 4.4                      # outer corner, tucked under the lash flick
+
+    def top_v(u):
+        """Upper edge of the opening: flat under the lash, dipping into the outer corner."""
+        if u >= -w + 3:
+            return 1.0
+        k = (-w + 3 - u) / (-w + 3 - uo)
+        return 1 + (vo - 1) * k * k
+
+    def bot_v(u):
+        """Lower lid: rises into the outer corner, rounds up toward the inner corner."""
+        if u <= 0:
+            k = u / uo
+            return vo + (h - vo) * math.sqrt(max(0.0, 1 - k * k))
+        return h * (0.45 + 0.55 * math.sqrt(max(0.0, 1 - (u / w) ** 2)))
+
     def inside(u, v):
-        """Eye opening: flat-ish top, rounded bottom toward the inner corner."""
-        if v < 1 or v > h:
-            return False
-        t = v / h
-        half = w * math.sqrt(max(0.0, 1 - max(0.0, (t - 0.45) / 0.55) ** 2))
-        return -w + (1 if v < 3 else 0) <= u <= half
+        return uo <= u <= w and top_v(u) <= v <= bot_v(u)
 
     def frange(a, b, step=0.25):
         n = max(1, int((b - a) / step))
@@ -405,8 +417,9 @@ def eye(pen, cx, flip, color, scale=1.0, gaze=0.0):
             dx = sx - iris_c
             e = (dx / irx) ** 2 + ((v - icy) / iry) ** 2
             pupil = (dx / prx) ** 2 + ((v - pcy) / pry) ** 2 <= 1
+            lid = v - top_v(s * sx)                 # distance below the upper lid
             if color:
-                c = SCLERA_SHADE if v <= 3 else WHITE
+                c = SCLERA_SHADE if lid <= 2 else WHITE
                 if e <= 1:
                     i = min(int(v / h * len(IRIS)), len(IRIS) - 1)
                     if v > icy + 1 and int((math.atan2(v - icy, dx) + math.pi) * 26 / (2 * math.pi)) % 2:
@@ -416,7 +429,7 @@ def eye(pen, cx, flip, color, scale=1.0, gaze=0.0):
                         c = IRIS[0]                    # dark rim
                     if pupil:
                         c = PUPIL
-                    if v <= 4:
+                    if lid <= 3:
                         c = IRIS[0]                    # shadow of the lid
             else:
                 c = BG
@@ -455,22 +468,26 @@ def eye(pen, cx, flip, color, scale=1.0, gaze=0.0):
             (-w - 0.4, 4.7), (-w + 0.6, 4.2), (-w + 0.6, 1.5)]
     d.polygon([(SX(u), SY(v)) for u, v in wing], fill=LINE)          # outer flick
     blob(s * (w + 1), 2, 0.6, 0.6, LINE, clip=False)                  # inner corner
-    # double eyelid crease (only on skin, not over hair)
-    crease = [(SX(u), SY(-4 - 2 * (1 - (u / w) ** 2))) for u in frange(-w + 3, w - 3)]
-    pen._clip(crease, SKIN_SHADE2 if color else LINE, {SKIN, SKIN_SHADE, BG},
-              lambda md, q: md.line(q, fill=1, width=1))
-    # lower lash, soft, with a short dark stroke at the outer end
-    d.line([(SX(u), SY(h + 0.9)) for u in (-w + 3, w - 4)], fill=SKIN_SHADE2 if color else LINE, width=1)
-    d.polygon([(SX(u), SY(v)) for u, v in ((-w + 0.6, h - 2.6), (-w + 1.6, h - 2.9), (-w + 3.8, h + 0.3),
-                                           (-w + 2.5, h + 0.7))], fill=LINE)
+    if not hair:   # double eyelid crease
+        crease = [(SX(u), SY(-4 - 2 * (1 - (u / w) ** 2))) for u in frange(-w + 3, w - 3)]
+        pen._clip(crease, SKIN_SHADE2 if color else LINE, {SKIN, SKIN_SHADE, BG},
+                  lambda md, q: md.line(q, fill=1, width=1))
+    # lower lid: a soft line under the eye, and a dark tapered stroke that closes the outer corner
+    d.line([(SX(u), SY(bot_v(u) + 0.9)) for u in frange(uo + 2.5, w * 0.6)],
+           fill=SKIN_SHADE2 if color else LINE, width=1)
+    ul = frange(uo, uo + 3.6)
+    th = lambda u: 0.2 + 0.75 * (1 - (u - uo) / 3.6)
+    d.polygon([(SX(u), SY(bot_v(u) + 0.3 - th(u))) for u in ul] +
+              [(SX(u), SY(bot_v(u) + 0.3 + th(u))) for u in reversed(ul)], fill=LINE)
     # brow: thin in the middle of its length, a touch lower at the outer end
     ub = frange(-w + 2, w - 2)
     mid, half_len = (ub[0] + ub[-1]) / 2, (ub[-1] - ub[0]) / 2
     bv = lambda u: -11 + max(0.0, min(1.0, (-w + 5 - u) / 3))
     bt = lambda u: 0.3 + 0.32 * (1 - ((u - mid) / half_len) ** 2)
-    brow = [(SX(u), SY(bv(u) - bt(u))) for u in ub] + [(SX(u), SY(bv(u) + bt(u))) for u in reversed(ub)]
-    pen._clip(brow, HAIR_SHADE if color else LINE, {SKIN, SKIN_SHADE, BG},
-              lambda md, q: md.polygon(q, fill=1))
+    if not hair:
+        brow = [(SX(u), SY(bv(u) - bt(u))) for u in ub] + [(SX(u), SY(bv(u) + bt(u))) for u in reversed(ub)]
+        pen._clip(brow, HAIR_SHADE if color else LINE, {SKIN, SKIN_SHADE, BG},
+                  lambda md, q: md.polygon(q, fill=1))
 
 
 def eye_layout():
@@ -485,11 +502,11 @@ def eye_layout():
     return out
 
 
-def features(pen, color):
+def features(pen, color, hair=False):
     gaze = 1.5 * TURN / 15          # eyes glance back toward the viewer
     (lx, ls), (rx, rs) = eye_layout()
-    eye(pen, lx, False, color, ls, gaze)
-    eye(pen, rx, True, color, rs, gaze)
+    eye(pen, lx, False, color, ls, gaze, hair)
+    eye(pen, rx, True, color, rs, gaze, hair)
     nose = SKIN_SHADE2 if color else LINE
     if TURN == 0:
         pen.aa_line([(CX + 0.5, NOSE_Y - 1), (CX, NOSE_Y)], nose, width=0.6 * E)
@@ -603,14 +620,9 @@ def hair_front(pen, step):
     for c in front:
         pen.poly(clump(*c), fill=hf)
     if color:
-        # each clump: darker core toward the tip, lighter rim on one side = rounded volume
+        # each clump: a lighter rim on one side gives it a rounded look
         for rl, rr, tx, ty in front:
             cx = (rl + rr) / 2
-            y0 = (24 + ty) / 2
-            top_pt, tip_pt = (cx + (tx - cx) * 0.4, y0 - 1), (tx, ty - 1.2)
-            left = smooth([top_pt, (cx - 0.5 + (tx - cx) * 0.6, (y0 + ty) / 2), tip_pt], n=6, closed=False)
-            right = smooth([tip_pt, (cx + 0.9 + (tx - cx) * 0.65, (y0 + ty) / 2), top_pt], n=6, closed=False)
-            pen.poly(left + right[1:], fill=HAIR_SHADE)
             pen.line(smooth([(rl + 1.4, 23.5), (rl + 1.8 + (tx - cx) * 0.3, (23 + ty) / 2), (tx - 0.4, ty - 3)],
                             n=5, closed=False), fill=HAIR_MID)
         # side locks: shaded inner half, highlight curve following the S
@@ -621,9 +633,6 @@ def hair_front(pen, step):
     for c in front:
         pts = clump(*c)
         pen.aa_line(pts[len(pts) // 3:], LINE, width=0.7 * E)
-    # one thin strand falling between the eyes
-    strand = smooth(warp([(43.5, 23), (42.6, 34), (41.7, 44), (41.3, 51)], bang_z), n=6, closed=False)
-    pen.aa_line(strand, HAIR if color else LINE, width=0.55 * E)
     # strand flow from the part, curving with the dome
     flow = HAIR_SHADE if color else GUIDE_FAINT
     for x, y_end in FLOW:
@@ -801,7 +810,7 @@ def panel(img, ox, oy, step):
         hair_front(pen, step)
         if color:
             hair_light(pen, img)
-    features(pen, color)       # eyes and brows sit on top of the bangs
+    features(pen, color, hair=step >= 3)      # eyes sit on top of the bangs
 
 
 def render(turn, name, title, labels):
