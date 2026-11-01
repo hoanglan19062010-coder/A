@@ -63,24 +63,51 @@ EAR_R = mirror(EAR_L)
 NECK = [(35.5, 64), (44.5, 64), (45.5, 81), (34.5, 81)]
 SHOULDERS = [(1, 100), (6, 89), (20, 84), (34.5, 80), (45.5, 80), (60, 84), (74, 89), (79, 100)]
 
-BACK_HAIR = [(18, 22), (14, 30), (14, 36), (11, 44), (12, 52), (9, 62), (10, 70), (7, 80),
-             (8, 86), (4, 96), (11, 92), (14, 99), (19, 93), (24, 98), (28, 90), (40, 88),
-             (52, 90), (56, 98), (61, 93), (66, 99), (69, 92), (76, 96), (72, 86), (73, 80),
-             (70, 70), (71, 62), (68, 52), (69, 44), (66, 36), (66, 30), (62, 22)]
-# bangs clumps: (root_l, root_r, tip_x, tip_y) - part slightly right of centre
-BANGS = [(19, 25, 21, 47), (23, 29, 25.5, 42), (27, 33, 29, 45.5), (31, 36.5, 33, 41),
-         (34.5, 40, 37, 44), (38.5, 44, 40.5, 46.5), (42.5, 47.5, 45, 42), (46, 51.5, 49, 45),
-         (50, 55.5, 52.5, 40.5), (53.5, 58.5, 56, 44.5), (57, 62, 59.5, 47)]
-SIDE_L = [(19, 30), (24, 36), (24.5, 50), (22.5, 62), (20.5, 70), (22, 80), (19, 76.5),
-          (16.5, 83), (16, 70), (17, 56), (16, 44)]
+def smooth(ctrl, n=8, closed=True):
+    """Catmull-Rom spline through control points -> dense smooth outline."""
+    pts = list(ctrl)
+    m = len(pts)
+    out = []
+    rng = range(m) if closed else range(m - 1)
+    for i in rng:
+        p0 = pts[(i - 1) % m] if closed or i > 0 else pts[0]
+        p1 = pts[i]
+        p2 = pts[(i + 1) % m]
+        p3 = pts[(i + 2) % m] if closed or i + 2 < m else pts[-1]
+        for k in range(n):
+            t = k / n
+            t2, t3 = t * t, t * t * t
+            out.append(tuple(0.5 * ((2 * p1[j]) + (-p0[j] + p2[j]) * t
+                                    + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2
+                                    + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3) for j in range(2)))
+    if not closed:
+        out.append(pts[-1])
+    return out
+
+
+# Long back hair: smooth, full volume, ending in a few big soft clumps
+BACK_HAIR = smooth([(40, 7), (53, 8.5), (62, 13), (67, 22), (69, 36), (71, 52), (73, 68), (75, 82),
+                    (76, 92), (70, 88), (67, 97), (61, 89), (56, 95), (52, 86), (40, 86),
+                    (28, 86), (24, 95), (19, 89), (13, 97), (10, 88), (4, 92),
+                    (5, 82), (7, 68), (9, 52), (11, 36), (13, 22), (18, 13), (27, 8.5)])
+# Volume crown: smooth dome a bit wider than the skull
+CROWN = smooth([(40, 7.5), (52, 9), (60, 13.5), (64.5, 21), (66, 29), (65.5, 33), (40, 30), (14.5, 33),
+                (14, 29), (15.5, 21), (20, 13.5), (28, 9)])
+# Bangs: soft curved clumps (root_l, root_r, tip_x, tip_y), part slightly right of centre
+BANGS = [(17, 25, 20, 47), (22, 30, 25, 43), (27, 35, 30.5, 46), (32, 39, 35, 42.5),
+         (36, 43, 39.5, 46.5), (41, 47, 44, 43), (45, 52, 48.5, 46), (49.5, 56, 53, 42.5),
+         (54, 60.5, 56.5, 46), (57.5, 64, 61, 47.5)]
+# Side locks: gentle S-curve that frames the face and flips softly at the end
+SIDE_L = smooth([(16, 28), (22, 31), (24.5, 42), (23.5, 54), (21.5, 66), (22.5, 76), (20, 84),
+                 (17.5, 77), (16.5, 66), (17.5, 54), (16, 42)])
 SIDE_R = mirror(SIDE_L)
 
 
 class Pen:
     """Draws on the hi-res panel using 80x100 grid coordinates."""
 
-    def __init__(self, d, ox, oy):
-        self.d, self.ox, self.oy = d, ox, oy
+    def __init__(self, d, ox, oy, img=None):
+        self.d, self.ox, self.oy, self.img = d, ox, oy, img
 
     def P(self, pts):
         return [(round(self.ox + x * K), round(self.oy + y * K)) for x, y in pts]
@@ -101,9 +128,11 @@ class Pen:
 
 
 def clump(rl, rr, tx, ty):
-    ty -= 3.5          # let the tips rest just above the lashes
-    mid = (24 + ty) / 2
-    return [(rl, 22), (rr, 22), (rr - 0.6, mid), (tx, ty), (rl + 0.6, mid)]
+    """A curved, tapering clump of bangs (bulges slightly toward its tip side)."""
+    lean = (tx - (rl + rr) / 2) * 0.35
+    left = smooth([(rl, 22), (rl + 0.5 + lean, (22 + ty) / 2), (tx, ty)], n=6, closed=False)
+    right = smooth([(tx, ty), (rr - 0.3 + lean, (22 + ty) / 2), (rr, 22)], n=6, closed=False)
+    return left + right[1:]
 
 
 def eye(pen, cx, flip, color):
@@ -163,7 +192,8 @@ def eye(pen, cx, flip, color):
     # double eyelid crease
     for dx in range(-w + 3, w - 2):
         arch = round(2 * (1 - (dx / w) ** 2))
-        d.point((X(dx), Y(-4 - arch)), fill=SKIN_SHADE2 if color else LINE)
+        if pen.img.getpixel((X(dx), Y(-4 - arch))) in (SKIN, SKIN_SHADE, BG):
+            d.point((X(dx), Y(-4 - arch)), fill=SKIN_SHADE2 if color else LINE)
     # lower lash, soft
     for dx in range(-w + 3, w - 3):
         d.point((X(dx), Y(h_bot + 1)), fill=SKIN_SHADE2 if color else LINE)
@@ -198,54 +228,50 @@ def guides(pen, faint):
     pen.line([(12, CHIN), (68, CHIN)], fill=red)
 
 
-def crown_shape():
-    pts = [(16.5, 32)]
-    for k in range(37):
-        a = math.radians(180 + k * 5)
-        r = 1.0 + (0.045 if k % 2 else 0.0)
-        pts.append((40 + 23.5 * r * math.cos(a), 31 + 19.5 * r * math.sin(a)))
-    pts.append((63.5, 32))
-    return pts
-
-
 def hair_front(pen, step):
     color = step == 4
     hf = HAIR if color else BG
-    pen.poly(crown_shape(), fill=hf, outline=LINE)
-    pen.poly([(18, 22), (62, 22), (62.5, 31), (17.5, 31)], fill=hf)
     pen.poly(SIDE_L, fill=hf, outline=LINE)
     pen.poly(SIDE_R, fill=hf, outline=LINE)
+    pen.poly(CROWN, fill=hf, outline=LINE)
+    pen.poly([(16, 21), (64, 21), (65, 30), (15, 30)], fill=hf)
     for c in BANGS:
         pen.poly(clump(*c), fill=hf)
     if color:
-        # shade toward the tips of each clump, then a lighter stripe
+        # each clump: darker core toward the tip, lighter rim on one side = rounded volume
         for rl, rr, tx, ty in BANGS:
-            pen.poly([((rl + rr) / 2 - 1.2, 34), ((rl + rr) / 2 + 1.2, 34), (tx, ty - 3)], fill=HAIR_SHADE)
-            pen.line([((rl + rr) / 2 - 0.5, 25), ((rl + rr) / 2 + (tx - (rl + rr) / 2) * 0.5, (25 + ty) / 2)], fill=HAIR_MID)
+            cx = (rl + rr) / 2
+            y0 = (24 + ty) / 2
+            pen.poly(smooth([(cx - 0.6 + (tx - cx) * 0.4, y0), (cx + (tx - cx) * 0.7, (y0 + ty) / 2 + 1), (tx, ty - 1.2)],
+                            n=5, closed=False) + [(cx + 1 + (tx - cx) * 0.4, y0)], fill=HAIR_SHADE)
+            pen.line(smooth([(rl + 1.4, 23.5), (rl + 1.8 + (tx - cx) * 0.3, (23 + ty) / 2), (tx - 0.4, ty - 3)],
+                            n=5, closed=False), fill=HAIR_MID)
+        # big soft volume shadows where the crown curves away
+        # side locks: shaded inner half, highlight curve following the S
+        pen.line(smooth([(21, 36), (22.5, 48), (21, 62), (20.5, 74)], n=6, closed=False), fill=HAIR_SHADE)
+        pen.line(smooth([(18, 40), (19.2, 52), (18.6, 64), (19.2, 76)], n=6, closed=False), fill=HAIR_MID)
+        pen.line(mirror(smooth([(21, 36), (22.5, 48), (21, 62), (20.5, 74)], n=6, closed=False)), fill=HAIR_SHADE)
+        pen.line(mirror(smooth([(18, 40), (19.2, 52), (18.6, 64), (19.2, 76)], n=6, closed=False)), fill=HAIR_MID)
     for c in BANGS:
         pts = clump(*c)
-        pen.line(pts[2:] + [pts[4]], fill=LINE)
-    # flyaway curl and strand flow from the part
-    pen.line([(42, 12), (41, 9), (42.5, 7), (45.5, 7.5)], fill=LINE)
+        pen.line(pts[len(pts) // 3:], fill=LINE)
+    # strand flow from the part, curving with the dome
     flow = HAIR_SHADE if color else GUIDE_FAINT
-    for x in (24, 29, 34, 50, 55, 60):
-        pen.line([(44, 13), ((44 + x) / 2, 18), (x, 28)], fill=flow)
-    pen.line([(44, 10.5), (44, 22)], fill=LINE)
+    for x in (20, 26, 32, 52, 58, 62):
+        pen.line(smooth([(44, 11), ((44 + x) / 2, 13.5 + abs(x - 44) * 0.15), (x, 27)], n=6, closed=False), fill=flow)
+    pen.line([(44, 9.5), (44, 20)], fill=LINE)
+    pen.line(smooth([(42, 10), (41, 6.5), (43, 4.5), (46, 5.5)], n=5, closed=False), fill=LINE)   # ahoge
     if color:
-        # angel-ring shine, broken into strands
-        for k, (a0, a1) in enumerate(((198, 228), (234, 262), (270, 300), (306, 336))):
-            pen.d.arc(tuple(pen.P([(22, 14), (58, 40)])[0] + pen.P([(22, 14), (58, 40)])[1]),
-                      a0, a1, fill=HAIR_HI, width=2)
-            pen.d.arc(tuple(pen.P([(23, 15.5), (57, 40)])[0] + pen.P([(23, 15.5), (57, 40)])[1]),
-                      a0 + 4, a1 - 6, fill=HAIR_SHINE)
-        # strands on side locks
-        for pts in ([(20, 38), (21.5, 52), (20, 66), (19.5, 76)], [(18, 46), (18, 62), (17.5, 74)]):
-            pen.line(pts, fill=HAIR_MID)
-            pen.line(mirror(pts), fill=HAIR_MID)
+        # angel-ring shine, broken into soft strands that follow the dome
+        box = pen.P([(20, 12), (60, 40)])
+        box2 = pen.P([(21.5, 13.5), (58.5, 40)])
+        for a0, a1 in ((200, 228), (234, 262), (272, 300), (308, 338)):
+            pen.d.arc((box[0][0], box[0][1], box[1][0], box[1][1]), a0, a1, fill=HAIR_HI, width=2)
+            pen.d.arc((box2[0][0], box2[0][1], box2[1][0], box2[1][1]), a0 + 5, a1 - 7, fill=HAIR_SHINE)
 
 
 def panel(img, ox, oy, step):
-    pen = Pen(ImageDraw.Draw(img), ox, oy)
+    pen = Pen(ImageDraw.Draw(img), ox, oy, img)
     if step == 1:
         guides(pen, faint=False)
         pen.poly(FACE, outline=GUIDE_BLUE)
@@ -258,16 +284,18 @@ def panel(img, ox, oy, step):
     # back hair + clothes
     if step >= 3:
         pen.poly(BACK_HAIR, fill=HAIR_SHADE if color else BG, outline=LINE)
+        strands = ([(12, 34), (11, 52), (11, 70), (10, 88)], [(15, 40), (14, 60), (15.5, 78), (14, 94)],
+                   [(9.5, 56), (8, 74), (7, 88)], [(18.5, 60), (19, 76), (20, 92)])
         if color:
-            for pts in ([(14, 40), (12, 60), (9, 84)], [(17, 50), (15, 70), (13, 92)],
-                        [(11.5, 64), (9, 90)]):
-                pen.line(pts, fill=HAIR)
-                pen.line(mirror(pts), fill=HAIR)
-            pen.poly([(22, 60), (58, 60), (56, 88), (24, 88)], fill=HAIR_DEEP)
+            pen.poly(smooth([(22, 56), (58, 56), (55, 86), (25, 86)], n=4), fill=HAIR_DEEP)
+            for k, pts in enumerate(strands):
+                c = HAIR_MID if k == 1 else HAIR
+                pen.line(smooth(pts, n=6, closed=False), fill=c)
+                pen.line(mirror(smooth(pts, n=6, closed=False)), fill=c)
         else:
-            for pts in ([(14, 40), (12, 60), (9, 84)], [(17, 50), (15, 70), (13, 92)]):
-                pen.line(pts, fill=GUIDE_FAINT)
-                pen.line(mirror(pts), fill=GUIDE_FAINT)
+            for pts in strands[:2]:
+                pen.line(smooth(pts, n=6, closed=False), fill=GUIDE_FAINT)
+                pen.line(mirror(smooth(pts, n=6, closed=False)), fill=GUIDE_FAINT)
     if color:
         pen.poly(SHOULDERS, fill=CLOTH, outline=LINE)
         pen.line([(8, 90), (22, 85.5), (34.5, 81.5)], fill=CLOTH_HI)
@@ -288,8 +316,7 @@ def panel(img, ox, oy, step):
     if color:
         for c in BANGS:  # bangs cast a soft shadow on the forehead
             rl, rr, tx, ty = c
-            pen.poly([(rl, 23), (rr, 23), (rr - 0.6, (26 + ty) / 2 + 0.5), (tx, ty - 0.5), (rl + 0.6, (26 + ty) / 2 + 0.5)],
-                     fill=SKIN_SHADE)
+            pen.poly([(x, y + 1.5) for x, y in clump(*c)], fill=SKIN_SHADE)
         # soft cheek shade along the jaw and blush
         pen.line([(23, 60), (27, 64.8), (32, 68.6), (37, 71)], fill=SKIN_SHADE)
         pen.line(mirror([(23, 60), (27, 64.8), (32, 68.6), (37, 71)]), fill=SKIN_SHADE)
@@ -297,9 +324,9 @@ def panel(img, ox, oy, step):
             pen.ellipse((x - 3.5, 57, x + 3.5, 59.5), fill=BLUSH)
             for k in range(3):
                 pen.line([(x - 2 + k * 1.6, 57.6), (x - 2.8 + k * 1.6, 58.8)], fill=(236, 160, 164))
-    features(pen, color)
     if step >= 3:
         hair_front(pen, step)
+    features(pen, color)       # eyes and brows sit on top of the bangs
 
 
 def main():
@@ -320,7 +347,10 @@ def main():
               "3  Hair: crown, bangs, side locks",
               "4  Color + shading"]
     for k, (ox, oy) in enumerate(((0, 0), (PW, 0), (0, PH), (PW, PH))):
-        d.text((ox * SCALE + 14, bar + oy * SCALE + 10), labels[k], fill=(170, 90, 100), font=small)
+        x, y = ox * SCALE + 14, bar + oy * SCALE + 10
+        l, t, r, bt = d.textbbox((x, y), labels[k], font=small)
+        d.rectangle((l - 6, t - 4, r + 6, bt + 4), fill=BG)
+        d.text((x, y), labels[k], fill=(170, 90, 100), font=small)
     d.line((PW * SCALE, bar, PW * SCALE, out.height), fill=(210, 205, 210), width=2)
     d.line((0, bar + PH * SCALE, out.width, bar + PH * SCALE), fill=(210, 205, 210), width=2)
     out.save("face_study.png")
