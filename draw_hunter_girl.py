@@ -94,37 +94,61 @@ d.line((33, 56, 38, 63), fill=SKIN_SHADE)
 d.line((63, 56, 58, 63), fill=SKIN_SHADE)
 d.line((38, 63, 44, 67), fill=SKIN_SHADE)
 d.line((58, 63, 52, 67), fill=SKIN_SHADE)
-d.rectangle((32, 34, 64, 41), fill=SKIN_SHADE)    # shadow under bangs
 
-# Half-lidded eyes (blank, calm)
+# Detailed half-lidded eyes: dark and lightless, calm and blank
+IRIS_ROWS = [(12, 10, 16), (18, 16, 24), (26, 24, 36), (36, 34, 50), (60, 58, 80), (40, 38, 54)]
+SCLERA_SHADE = (214, 208, 220)
+
 def eye(x0, flip):
-    # 11px wide, centred on y=50
-    xs = (lambda i: x0 + 10 - i) if flip else (lambda i: x0 + i)
-    # sclera + iris (only lower part visible under heavy lid)
-    for i in range(1, 10):
-        d.line((xs(i), 49, xs(i), 52), fill=SCLERA)
-    for i in range(3, 8):
-        d.line((xs(i), 49, xs(i), 52), fill=IRIS)
-    # heavy upper lid: flat, slightly drooping at the outer corner
-    for i in range(0, 11):
-        d.point((xs(i), 48), fill=LASH)
-    for i in range(1, 10):
-        d.point((xs(i), 47), fill=LASH)
-    d.point((xs(10), 49), fill=LASH)
-    d.point((xs(11), 49), fill=LASH)
-    d.point((xs(11), 47), fill=LASH)       # outer lash flick
-    d.point((xs(12), 46), fill=LASH)
-    # crease line above the lid
-    for i in range(2, 9):
-        d.point((xs(i), 45), fill=SKIN_DARK)
-    # lower lash line, soft
-    for i in range(2, 10):
-        d.point((xs(i), 53), fill=SKIN_DARK)
-    d.point((xs(8), 54), fill=SKIN_DARK)
-    d.point((xs(5), 54), fill=SKIN_DARK)
+    # i = 0 is the outer corner, i = 12 the inner corner
+    xs = (lambda i: x0 + 12 - i) if flip else (lambda i: x0 + i)
+    p = lambda i, y, c: d.point((xs(i), y), fill=c)
+    # double-eyelid crease
+    for i in range(3, 10):
+        p(i, 43, SKIN_DARK)
+    # opening: sclera
+    for y in range(47, 52):
+        for i in range(1, 12):
+            p(i, y, SCLERA)
+    for i in range(2, 11):
+        p(i, 52, SCLERA)
+    for i in range(1, 12):
+        p(i, 47, SCLERA_SHADE)            # shadow cast by the lid
+    # iris with a dark-to-dim gradient, no highlight
+    for row, y in enumerate(range(47, 53)):
+        lo, hi = (4, 9) if y in (47, 52) else (3, 10)
+        for i in range(lo, hi + 1):
+            p(i, y, IRIS_ROWS[row])
+    for i in (3, 10):
+        for y in (48, 51):
+            p(i, y, IRIS_ROWS[0])         # darker iris rim
+    for i in range(5, 9):
+        for y in range(48, 51):
+            p(i, y, (8, 6, 10))           # pupil
+    # heavy upper lid with lashes
+    for i in range(1, 12):
+        p(i, 45, LASH)
+    for i in range(0, 13):
+        p(i, 46, LASH)
+    p(0, 47, LASH)
+    p(-1, 45, LASH)                       # outer wing
+    p(-2, 44, LASH)
+    p(-1, 47, LASH)                       # separate lash tick
+    p(1, 44, LASH)
+    p(12, 47, (120, 100, 104))            # inner corner
+    # lower lash line, soft, with a couple of lashes at the outer end
+    for i in range(2, 11):
+        p(i, 53, SKIN_DARK)
+    p(1, 52, (90, 78, 84))
+    p(1, 53, (90, 78, 84))
+    p(2, 54, SKIN_DARK)
+    p(4, 54, SKIN_DARK)
+    # faint shade under the eye
+    for i in range(5, 9):
+        p(i, 54, SKIN_SHADE)
 
-eye(34, flip=True)
-eye(51, flip=False)
+eye(33, flip=False)
+eye(51, flip=True)
 
 # Nose: tiny shadow; mouth: small flat neutral line
 d.point((48, 57), fill=SKIN_DARK)
@@ -133,50 +157,40 @@ d.line((46, 62, 50, 62), fill=LIP)
 d.point((48, 63), fill=SKIN_SHADE)
 
 # --- Front hair ---
-# Crown of the head
-d.ellipse((26, 8, 70, 36), fill=HAIR)
+hairline = [(26, 22), (70, 22), (70, 42), (66, 38), (60, 33), (52, 30),
+            (46, 29), (40, 30), (34, 33), (29, 38), (26, 42)]
+# soft shadow just under the hairline
+d.line([(x, y + 1) for x, y in hairline[3:-1]], fill=SKIN_SHADE)
+d.ellipse((26, 8, 70, 38), fill=HAIR)
+d.polygon(hairline, fill=HAIR)
 
-# Messy bangs: many separate tapered strands of uneven length
-# (root_x, tip_x, tip_y, half_width)
-strands = [
-    (29, 27, 48, 3), (32, 31, 43, 3), (35, 34, 46, 2), (37, 40, 41, 2),
-    (40, 38, 45, 2), (43, 45, 43, 2), (45, 47, 48, 2), (48, 46, 40, 2),
-    (50, 52, 46, 2), (53, 51, 42, 2), (55, 58, 45, 2), (58, 56, 41, 2),
-    (60, 62, 46, 3), (63, 64, 42, 3), (67, 69, 49, 3),
-]
-for rx, tx, ty, w in strands:
-    d.polygon([(rx - w, 26), (rx + w, 26), (tx, ty)], fill=HAIR)
-# Thin lines inside the fringe to separate the strands
-for rx, tx, ty, w in strands[::2]:
-    d.line((rx, 28, (rx + tx) // 2, (28 + ty) // 2), fill=HAIR_MID)
-
-# Stray tufts poking out of the silhouette
-for poly in (
-    [(27, 20), (29, 16), (21, 13)],
-    [(69, 20), (67, 16), (75, 14)],
-    [(36, 11), (39, 9), (32, 5)],
-    [(60, 11), (57, 9), (63, 4)],
-    [(26, 28), (26, 32), (19, 34)],
-    [(70, 28), (70, 32), (77, 35)],
+# Swept-back strand lines flowing from the hairline over the head
+for pts in (
+    [(31, 36), (30, 26), (34, 16)],
+    [(36, 32), (37, 22), (42, 13)],
+    [(42, 30), (44, 20), (48, 11)],
+    [(50, 30), (52, 20), (54, 11)],
+    [(57, 32), (60, 22), (60, 14)],
+    [(64, 36), (66, 26), (64, 17)],
 ):
-    d.polygon(poly, fill=HAIR)
+    d.line(pts, fill=HAIR_MID)
 
-# Slim side locks, a little jagged
-d.polygon([(27, 34), (31, 36), (31, 50), (29, 62), (27, 54)], fill=HAIR)
-d.polygon([(28, 52), (30, 56), (26, 64)], fill=HAIR)
-d.polygon([(69, 34), (65, 36), (65, 50), (67, 60), (69, 54)], fill=HAIR)
-d.polygon([(68, 52), (66, 56), (70, 66)], fill=HAIR)
+# The two long strands left loose over the forehead
+d.polygon([(44, 29), (47, 29), (45, 40), (43, 49)], fill=HAIR)
+d.polygon([(47, 29), (50, 29), (49, 41), (47, 51)], fill=HAIR)
+d.line((46, 31, 44, 45), fill=HAIR_MID)
+
+# Slim, neat side locks
+d.polygon([(27, 36), (31, 40), (31, 52), (29, 62), (27, 54)], fill=HAIR)
+d.polygon([(69, 36), (65, 40), (65, 52), (67, 62), (69, 54)], fill=HAIR)
 
 # Ahoge: two strands curling up from the crown
 d.line([(44, 9), (45, 5), (48, 2), (53, 1)], fill=HAIR)
 d.line([(47, 9), (48, 6), (51, 3), (55, 3)], fill=HAIR)
 
 # Hair sheen
-for pts in (
-    [(36, 14), (42, 12), (52, 12), (58, 14)],
-    [(31, 18), (34, 16)],
-):
-    d.line(pts, fill=HAIR_HI)
+d.line([(36, 14), (42, 12), (52, 12), (58, 14)], fill=HAIR_HI)
+d.line([(31, 19), (34, 16)], fill=HAIR_HI)
 
 # Dark edge where hair meets background, for a crisp sprite look
 src = img.copy().load()
