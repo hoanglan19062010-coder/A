@@ -1,12 +1,21 @@
-"""Pixel-art anime face construction study in 4 steps (2x2 sheet), hi-res version.
+"""Pixel-art anime face construction study (2x2 sheets): front view and a 15-degree head turn.
 
-Geometry is laid out on an 80x100 grid and multiplied by K, so the art has K times
-more pixels in each direction for finer lines, eyes and hair detail.
+Geometry is laid out on an 80x100 grid and multiplied by K, so the art has K times more
+pixels in each direction.
 
-Proportions follow the classic anime head guide:
-- cranium circle, jaw tapering to a soft rounded chin
-- eye line at half the head height, nose and mouth splitting the lower half
-- ears between eye line and nose, short slim neck
+Front-view proportions:
+- cranium circle; two lines from the cheeks meet at a soft chin
+- eye line at half the head height, eyes sit just below it
+- nose halfway between eyes and chin, mouth halfway between nose and chin
+- ears from the eye line down to the nose
+
+Turning the head:
+the head is modelled as stacked horizontal slices - circles for the skull, ellipses for the
+jaw that move forward and shrink toward the chin. Every point of the front-view design gets
+a depth from that model, the head is rotated around its vertical axis, and the point is
+drawn where it lands. Cheek and jaw outlines are rebuilt from the rotated slices, so the far
+cheek fills out and the near jaw slims down, while the skull circle stays the same.
+The body and the long back hair keep facing front.
 """
 import math
 import random
@@ -24,7 +33,9 @@ SKIN = (252, 236, 226)
 SKIN_SHADE = (240, 208, 198)
 SKIN_SHADE2 = (226, 186, 178)
 BLUSH = (248, 190, 190)
+BLUSH_LINE = (236, 160, 164)
 LIP = (196, 112, 114)
+LIP_HI = (236, 196, 190)
 HAIR = (78, 62, 92)
 HAIR_SHADE = (54, 42, 66)
 HAIR_DEEP = (38, 30, 48)
@@ -36,33 +47,24 @@ IRIS = [(24, 30, 66), (30, 40, 82), (38, 54, 104), (50, 74, 130), (66, 100, 160)
 PUPIL = (16, 18, 40)
 WHITE = (255, 255, 255)
 SCLERA_SHADE = (222, 220, 236)
+IRIS_GLINT = (210, 230, 250)
 CLOTH = (60, 70, 90)
 CLOTH_HI = (82, 94, 118)
 
 CX = 40
 TOP, CHIN = 14, 72
+CHIN_Y = 72.4
 EYE_Y = (TOP + CHIN) // 2          # 43: half the head; eyes sit just below it
 NOSE_Y = 60                          # halfway between eye centre and chin
 MOUTH_Y = 66                         # halfway between nose and chin
 
-
-def arc(cx, cy, r, a0, a1, n=48):
-    return [(cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a)))
-            for a in [a0 + (a1 - a0) * k / n for k in range(n + 1)]]
+TURN = 0.0   # head yaw in degrees; positive turns the face toward the viewer's left
 
 
-def mirror(pts):
-    return [(2 * CX - x, y) for x, y in pts]
+def cos_sin():
+    t = math.radians(TURN)
+    return math.cos(t), math.sin(t)
 
-
-# bigger cranium; round cheeks tapering to a softly pointed chin
-FACE = arc(CX, 36, 21, 180, 360) + [(61, 44), (60.8, 50), (59.8, 55.5), (57.5, 60.5), (54, 65),
-                                    (49, 68.8), (43.5, 71.4), (40, 72.4), (36.5, 71.4), (31, 68.8),
-                                    (26, 65), (22.5, 60.5), (20.2, 55.5), (19.2, 50), (19, 44)]
-EAR_L = [(19.5, 45), (17, 45.5), (16, 48.5), (16.3, 53), (17.5, 57.5), (19.3, 60), (20, 60)]   # eye line to nose
-EAR_R = mirror(EAR_L)
-NECK = [(35.5, 64), (44.5, 64), (45.5, 81), (34.5, 81)]
-SHOULDERS = [(1, 100), (6, 89), (20, 84), (34.5, 80), (45.5, 80), (60, 84), (74, 89), (79, 100)]
 
 def smooth(ctrl, n=8, closed=True):
     """Catmull-Rom spline through control points -> dense smooth outline."""
@@ -86,29 +88,193 @@ def smooth(ctrl, n=8, closed=True):
     return out
 
 
+def mirror(pts):
+    return [(2 * CX - x, y) for x, y in pts]
+
+
+def table(rows, y):
+    """Piecewise-linear lookup in [(y, value), ...] sorted by y."""
+    if y <= rows[0][0]:
+        return rows[0][1]
+    for (y0, v0), (y1, v1) in zip(rows, rows[1:]):
+        if y <= y1:
+            return v0 + (v1 - v0) * (y - y0) / (y1 - y0)
+    return rows[-1][1]
+
+
+def ellipse_pts(l, t, r, b, n=28):
+    cx, cy, rx, ry = (l + r) / 2, (t + b) / 2, (r - l) / 2, (b - t) / 2
+    return [(cx + rx * math.cos(2 * math.pi * k / n), cy + ry * math.sin(2 * math.pi * k / n)) for k in range(n)]
+
+
+# ------------------------------------------------------------------ 3D head model
+# Front-view half-width of the lower face: round cheeks tapering to a softly pointed chin.
+_jaw = smooth([(21, 44), (20.8, 50), (19.8, 55.5), (17.5, 60.5), (14, 65), (9, 68.8), (3.5, 71.4),
+               (0, CHIN_Y)], n=10, closed=False)
+JAW_TABLE = []
+for _a, _y in _jaw:
+    if not JAW_TABLE or _y > JAW_TABLE[-1][0]:
+        JAW_TABLE.append((_y, max(0.0, _a)))
+# How far forward each jaw slice sits, and how far the front of the face reaches.
+ZC_TABLE = [(44, 0), (50, 1), (56, 3.5), (62, 7), (68, 11), (CHIN_Y, 15)]
+FRONT_TABLE = [(44, 21), (50, 20.5), (56, 20), (62, 19.5), (68, 18.5), (CHIN_Y, 17)]
+
+
+def head_slice(y):
+    """Slice of the head at height y: (half-width a, forward offset zc, half-depth b)."""
+    if y < 36:
+        a = math.sqrt(max(0.0, 21 ** 2 - (y - 36) ** 2))
+        return a, 0.0, a
+    if y <= 44:
+        return 21.0, 0.0, 21.0
+    a = table(JAW_TABLE, y)
+    zc = table(ZC_TABLE, y)
+    return a, zc, max(0.5, table(FRONT_TABLE, y) - zc)
+
+
+def face_z(x, y):
+    """Depth (toward the viewer) of the face/skull surface under front-view point (x, y)."""
+    a, zc, b = head_slice(y)
+    r = abs(x - CX)
+    if a < 1e-6:
+        return zc + b if r < 1e-6 else zc - min(r * 1.5, 8.0)
+    if r <= a:
+        return zc + b * math.sqrt(1 - (r / a) ** 2)
+    return zc - min((r - a) * 1.5, 8.0)
+
+
+def shell_z(x, y):
+    """Depth of the hair shell that hugs the skull."""
+    r2 = 23.5 ** 2 - (x - CX) ** 2 - (y - 35.5) ** 2
+    return math.sqrt(r2) if r2 > 0 else 0.0
+
+
+def bang_z(x, y):
+    """Bangs grow from the shell and then lie just in front of the face."""
+    return shell_z(x, y) if y <= 30 else max(shell_z(x, y), face_z(x, y) + 1.5)
+
+
+def lock_z(x, y):
+    """Side locks hang beside the cheeks, angled outward."""
+    return max(-4.0, min(12.0, 9 - 0.8 * (abs(x - CX) - 16)))
+
+
+def turn_x(x, z):
+    """Rotate a point (front-view x, depth z) around the head's vertical axis."""
+    c, s = cos_sin()
+    return CX + (x - CX) * c - z * s
+
+
+def warp(pts, zf):
+    return [(turn_x(x, zf(x, y)), y) for x, y in pts]
+
+
+SIL_YS = [15 + i * 0.25 for i in range(int((CHIN_Y - 15) / 0.25) + 1)] + [CHIN_Y]
+
+
+def silhouette(y):
+    """Leftmost / rightmost x (relative to CX) of the rotated head slice at height y."""
+    a, zc, b = head_slice(y)
+    c, s = cos_sin()
+    xs = [a * math.cos(t) * c - (zc + b * math.sin(t)) * s
+          for t in (2 * math.pi * k / 120 for k in range(120))]
+    lo, hi = min(xs), max(xs)
+    # anime touch on the far side: small dip at the temple, cheekbone bump below the eye
+    f = TURN / 15
+    adj = 0.55 * math.exp(-((y - 44) / 2.5) ** 2) - 0.5 * math.exp(-((y - 52) / 3) ** 2)
+    if f > 0:
+        lo += adj * f
+    elif f < 0:
+        hi += adj * f
+    return lo, hi
+
+
+def face_outline():
+    left, right = [], []
+    for y in SIL_YS:
+        lo, hi = silhouette(y)
+        left.append((CX + lo, y))
+        right.append((CX + hi, y))
+    return right + left[::-1]
+
+
+def center_line():
+    return [(turn_x(CX, face_z(CX, y)), y) for y in SIL_YS]
+
+
+def chin_point():
+    return turn_x(CX, face_z(CX, CHIN_Y)), CHIN_Y
+
+
+EAR_L = [(19.5, 45), (17, 45.5), (16, 48.5), (16.3, 53), (17.5, 57.5), (19.3, 60), (20, 60)]
+EAR_SHADE_L = [(17.8, 48), (17.6, 54)]
+
+
+def ear_map(pts, side):
+    """Ears stay glued to the head outline; the near ear opens up, the far one squeezes."""
+    s = abs(cos_sin()[1])
+    near = TURN != 0 and (side > 0) == (TURN > 0)
+    g = 1 + 1.2 * s if near else 1 - 1.5 * s
+    out = []
+    for x, y in pts:
+        a = head_slice(y)[0]
+        lo, hi = silhouette(y)
+        edge = hi if side > 0 else lo
+        out.append((CX + edge + side * (abs(x - CX) - a) * g, y))
+    return out
+
+
+NECK = [(35.5, 64), (44.5, 64), (45.5, 81), (34.5, 81)]
+SHOULDERS = [(1, 100), (6, 89), (20, 84), (34.5, 80), (45.5, 80), (60, 84), (74, 89), (79, 100)]
+
+
+def neck_shift(y):
+    """The top of the neck turns a little with the head; the base stays with the body."""
+    return -1.6 * (TURN / 15) * max(0.0, min(1.0, (81 - y) / 17))
+
+
+def neck_warp(pts):
+    return [(x + neck_shift(y), y) for x, y in pts]
+
+
+# ------------------------------------------------------------------ hair shapes (front view)
 # Long back hair: smooth, full volume, ending in a few big soft clumps
 BACK_HAIR = smooth([(40, 13), (51, 14.5), (59, 19), (63.5, 27), (65, 38), (67, 50), (70, 64), (73, 78),
                     (76, 92), (70, 88), (67, 97), (61, 89), (56, 95), (52, 86), (40, 86),
                     (28, 86), (24, 95), (19, 89), (13, 97), (10, 88), (4, 92),
                     (7, 78), (10, 64), (13, 50), (15, 38), (16.5, 27), (21, 19), (29, 14.5)])
-# Volume crown: smooth dome a bit wider than the skull
+BACK_STRANDS = ([(15, 40), (13.5, 56), (11.5, 72), (9.5, 88)], [(17.5, 46), (16, 62), (15, 78), (14, 94)],
+                [(13, 60), (11, 75), (8.5, 88)], [(19, 62), (19, 78), (20, 92)])
 # hair hugging the cranium circle (centre 40,36 r 21) with ~2.5px of thickness
-CROWN = [(40 + 23.5 * math.cos(math.radians(a)), 35.5 + 23 * math.sin(math.radians(a)))
-         for a in range(180, 361, 4)] + [(63.5, 34), (40, 31), (16.5, 34)]
+CROWN_ARC = [(40 + 23.5 * math.cos(math.radians(a)), 35.5 + 23 * math.sin(math.radians(a)))
+             for a in range(180, 361, 4)]
 # Bangs: soft curved clumps (root_l, root_r, tip_x, tip_y), part slightly right of centre
 BANGS = [(20.5, 25, 20, 47), (22, 30, 25, 43), (27, 35, 30.5, 46), (32, 39, 35, 42.5),
          (36, 43, 39.5, 46.5), (41, 47, 44, 43), (45, 52, 48.5, 46), (49.5, 56, 53, 42.5),
          (54, 60.5, 56.5, 46), (57.5, 59.5, 61, 47.5)]
+# A second, darker layer of bangs behind the first, peeking out under the short clumps
+BANGS_BACK = [(23, 28, 26.5, 46.8), (33, 38, 36.2, 46.2), (42, 47, 45.4, 47), (50.5, 55.5, 53.8, 46.2)]
 # Side locks: gentle S-curve that frames the face and flips softly at the end
 SIDE_L = smooth([(16, 28), (22, 31), (24.5, 42), (23.5, 54), (21.5, 66), (22.5, 76), (20, 84),
                  (17.5, 77), (16.5, 66), (17.5, 54), (16, 42)])
 SIDE_R = mirror(SIDE_L)
+LOCK_SHADE = [(21, 36), (22.5, 48), (21, 62), (20.5, 74)]
+LOCK_HI = [(18, 40), (19.2, 52), (18.6, 64), (19.2, 76)]
+LOCK_EDGE = [(22.7, 31), (25.2, 42), (24.2, 54), (22.2, 66)]      # just inside each lock, on the cheek
+# Strand flow lines from the part: (end x, end y)
+FLOW = [(21, 29), (27, 29), (33, 29), (54, 29), (59, 29), (62, 29),
+        (24.5, 25), (30, 25.5), (51, 25.5), (57, 25)]
+
+
+def crown_poly():
+    # the outline of a ball doesn't change when it turns; only the hairline swings round
+    return CROWN_ARC + [(63.5, 34), (turn_x(40, shell_z(40, 31)), 31), (16.5, 34)]
 
 
 class Pen:
     """Draws on the hi-res panel using 80x100 grid coordinates."""
 
-    def __init__(self, d, ox, oy, img=None):
+    def __init__(self, d, ox, oy, img):
         self.d, self.ox, self.oy, self.img = d, ox, oy, img
 
     def P(self, pts):
@@ -124,9 +290,30 @@ class Pen:
         (x0, y0), (x1, y1) = self.P([box[:2], box[2:]])
         self.d.ellipse((x0, y0, x1, y1), fill=fill, outline=outline)
 
-    def px(self, x, y, c):
-        """Raw hi-res pixel relative to panel origin."""
-        self.d.point((self.ox + x, self.oy + y), fill=c)
+    def _clip(self, P, fill, only, draw):
+        xs, ys = [p[0] for p in P], [p[1] for p in P]
+        x0, x1 = max(0, min(xs) - 1), min(self.img.width - 1, max(xs) + 1)
+        y0, y1 = max(0, min(ys) - 1), min(self.img.height - 1, max(ys) + 1)
+        if x1 < x0 or y1 < y0:
+            return
+        mask = Image.new("1", (x1 - x0 + 1, y1 - y0 + 1), 0)
+        draw(ImageDraw.Draw(mask), [(x - x0, y - y0) for x, y in P])
+        m, px = mask.load(), self.img.load()
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                if m[x - x0, y - y0] and px[x, y] in only:
+                    px[x, y] = fill
+
+    def poly_clip(self, pts, fill, only):
+        """Fill a polygon, but only over pixels that already have one of the `only` colours."""
+        P = self.P(pts)
+        if len(P) >= 3:
+            self._clip(P, fill, only, lambda md, q: md.polygon(q, fill=1))
+
+    def line_clip(self, pts, fill, only):
+        P = self.P(pts)
+        if len(P) >= 2:
+            self._clip(P, fill, only, lambda md, q: md.line(q, fill=1))
 
 
 def clump(rl, rr, tx, ty):
@@ -137,134 +324,253 @@ def clump(rl, rr, tx, ty):
     return left + right[1:]
 
 
-def eye(pen, cx, flip, color):
-    """Hi-res anime eye. cx is the eye centre on the 80-grid."""
+def bang_clumps(lst):
+    """Bangs after the turn: roots ride on the hair shell, tips on the face."""
+    return [(turn_x(rl, bang_z(rl, 22)), turn_x(rr, bang_z(rr, 22)), turn_x(tx, bang_z(tx, ty)), ty)
+            for rl, rr, tx, ty in lst]
+
+
+# ------------------------------------------------------------------ face features
+def eye(pen, cx, flip, color, scale=1.0, gaze=0.0):
+    """Anime eye drawn pixel by pixel. cx: eye centre (grid). scale squeezes it sideways
+    (far eye on a turned head); gaze slides the iris left/right in screen pixels."""
     s = -1 if flip else 1                      # +1: outer corner on the left
-    X = lambda dx: round(pen.ox + (cx * K) + s * dx)
-    Y = lambda dy: round(pen.oy + (EYE_Y + 1) * K + dy)
+    ecx = pen.ox + cx * K
+    top = pen.oy + (EYE_Y + 1) * K
+    X = lambda u: round(ecx + s * u)
+    Y = lambda v: round(top + v)
     d = pen.d
-    w = 11                                      # half-width in hi-res pixels
-    h_top, h_bot = 0, 17
-    # eye opening shape: flat-ish top, rounded bottom
-    def inside(dx, dy):
-        if dy < 1 or dy > h_bot:
+    w = 11 * scale                              # half-width in hi-res pixels
+    wi = round(w)
+    h_bot = 17
+    iris_x = ecx + s * scale + gaze             # iris centre (screen x), a touch toward the nose
+    irx, iry, icy = 6.5 * scale, 9, 9
+    prx, pry, pcy = 3.1 * scale, 4.6, 7.5
+
+    def inside(u, v):
+        """Eye opening: flat-ish top, rounded bottom toward the inner corner."""
+        if v < 1 or v > h_bot:
             return False
-        t = dy / h_bot
+        t = v / h_bot
         half = w * math.sqrt(max(0.0, 1 - max(0.0, (t - 0.45) / 0.55) ** 2))
-        return -w + (1 if dy < 3 else 0) <= dx <= half
-    icx, icy, irx, iry = 1, 9, 6.5, 9           # iris ellipse
-    for dy in range(1, h_bot + 1):
-        for dx in range(-w, w + 1):
-            if not inside(dx, dy):
+        return -w + (1 if v < 3 else 0) <= u <= half
+
+    for v in range(1, h_bot + 1):
+        for u in range(-wi - 1, wi + 2):
+            if not inside(u, v):
                 continue
-            in_iris = ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 <= 1
+            sx = ecx + s * u
+            e = ((sx - iris_x) / irx) ** 2 + ((v - icy) / iry) ** 2
+            pupil = ((sx - iris_x) / prx) ** 2 + ((v - pcy) / pry) ** 2 <= 1
             if color:
-                c = SCLERA_SHADE if dy <= 3 else WHITE
-                if in_iris:
-                    c = IRIS[min(int(dy / h_bot * len(IRIS)), len(IRIS) - 1)]
-                    if ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 > 0.78:
+                c = SCLERA_SHADE if v <= 3 else WHITE
+                if e <= 1:
+                    c = IRIS[min(int(v / h_bot * len(IRIS)), len(IRIS) - 1)]
+                    if e > 0.78:
                         c = IRIS[0]                             # dark rim
-                    if ((dx - icx) / 3.1) ** 2 + ((dy - 7.5) / 4.6) ** 2 <= 1:
+                    if pupil:
                         c = PUPIL
-                    if dy <= 4:
+                    if v <= 4:
                         c = IRIS[0]                             # lid shadow
             else:
                 c = BG
-                if in_iris and ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 > 0.72:
+                if 0.72 < e <= 1 or pupil:
                     c = LINE
-                if ((dx - icx) / 3.1) ** 2 + ((dy - 7.5) / 4.6) ** 2 <= 1:
-                    c = LINE
-            d.point((X(dx), Y(dy)), fill=c)
-    # highlights
-    hl = WHITE
-    for dx, dy in ((-2, 4), (-3, 4), (-2, 5), (-3, 5), (-2, 6), (-3, 6), (-1, 5)):
-        d.point((X(dx), Y(dy)), fill=hl)
+            d.point((X(u), Y(v)), fill=c)
+
+    def glint(dx, v, c):
+        sx = round(iris_x + dx * max(scale, 0.8))
+        if inside((sx - ecx) * s, v):
+            d.point((sx, Y(v)), fill=c)
+
+    # highlights: light from the upper left for both eyes
+    for dx, v in ((-3, 4), (-4, 4), (-3, 5), (-4, 5), (-3, 6), (-4, 6), (-2, 5)):
+        glint(dx, v, WHITE)
     if color:
-        for dx, dy in ((3, 13), (4, 13), (3, 14)):
-            d.point((X(dx), Y(dy)), fill=(210, 230, 250))
+        for dx, v in ((2, 13), (3, 13), (2, 14)):
+            glint(dx, v, IRIS_GLINT)
     # thick upper lash, arched, heaviest and flicked at the outer corner
-    for dx in range(-w - 1, w + 2):
-        arch = round(2.2 * (1 - (dx / (w + 1)) ** 2))
-        thick = 4 if dx < 3 else 3
+    for u in range(-wi - 1, wi + 2):
+        arch = round(2.2 * (1 - (u / (wi + 1)) ** 2))
+        thick = 4 if u < 3 else 3
         for t in range(-1, thick - 1):
-            d.point((X(dx), Y(-arch + t)), fill=LINE)
-    for dx, dy in ((-w - 2, 1), (-w - 3, 2), (-w - 2, 2), (-w - 4, 3), (-w - 1, 3), (-w, 4)):
-        d.point((X(dx), Y(dy)), fill=LINE)
-    d.point((X(w + 1), Y(2)), fill=LINE)
-    # double eyelid crease
-    for dx in range(-w + 3, w - 2):
-        arch = round(2 * (1 - (dx / w) ** 2))
-        if pen.img.getpixel((X(dx), Y(-4 - arch))) in (SKIN, SKIN_SHADE, BG):
-            d.point((X(dx), Y(-4 - arch)), fill=SKIN_SHADE2 if color else LINE)
+            d.point((X(u), Y(-arch + t)), fill=LINE)
+    for u, v in ((-wi - 2, 1), (-wi - 3, 2), (-wi - 2, 2), (-wi - 4, 3), (-wi - 1, 3), (-wi, 4)):
+        d.point((X(u), Y(v)), fill=LINE)
+    d.point((X(wi + 1), Y(2)), fill=LINE)
+    # double eyelid crease (only on skin, not over hair)
+    for u in range(-wi + 3, wi - 2):
+        arch = round(2 * (1 - (u / wi) ** 2))
+        p = (X(u), Y(-4 - arch))
+        if pen.img.getpixel(p) in (SKIN, SKIN_SHADE, BG):
+            d.point(p, fill=SKIN_SHADE2 if color else LINE)
     # lower lash, soft
-    for dx in range(-w + 3, w - 3):
-        d.point((X(dx), Y(h_bot + 1)), fill=SKIN_SHADE2 if color else LINE)
-    for dx, dy in ((-w + 1, h_bot - 2), (-w + 2, h_bot - 1), (-w + 2, h_bot), (-w + 3, h_bot)):
-        d.point((X(dx), Y(dy)), fill=LINE)
+    for u in range(-wi + 3, wi - 3):
+        d.point((X(u), Y(h_bot + 1)), fill=SKIN_SHADE2 if color else LINE)
+    for u, v in ((-wi + 1, h_bot - 2), (-wi + 2, h_bot - 1), (-wi + 2, h_bot), (-wi + 3, h_bot)):
+        d.point((X(u), Y(v)), fill=LINE)
     # brow
-    for dx in range(-w + 2, w - 1):
-        y = -11 + (1 if dx < -w + 5 else 0)
-        d.point((X(dx), Y(y)), fill=HAIR_SHADE if color else LINE)
+    for u in range(-wi + 2, wi - 1):
+        v = -11 + (1 if u < -wi + 5 else 0)
+        d.point((X(u), Y(v)), fill=HAIR_SHADE if color else LINE)
+
+
+def eye_layout():
+    """Where each eye lands after the turn: (centre x, width scale) for left and right."""
+    ye = EYE_Y + 1 + 8.5 / K
+    out = []
+    for side in (-1, 1):
+        c0 = CX + side * 10.5
+        xo, xi = c0 + side * 5.5, c0 - side * 5.5          # outer and inner corners
+        po, pin = turn_x(xo, face_z(xo, ye)), turn_x(xi, face_z(xi, ye))
+        out.append(((po + pin) / 2, min(1.04, abs(po - pin) / 11)))
+    return out
 
 
 def features(pen, color):
-    eye(pen, CX - 10.5, False, color)
-    eye(pen, CX + 10.5, True, color)
+    gaze = 1.5 * TURN / 15          # eyes glance back toward the viewer
+    (lx, ls), (rx, rs) = eye_layout()
+    eye(pen, lx, False, color, ls, gaze)
+    eye(pen, rx, True, color, rs, gaze)
     nose = SKIN_SHADE2 if color else LINE
-    pen.line([(CX + 0.5, NOSE_Y - 1), (CX, NOSE_Y)], fill=nose)
-    m = LIP if color else LINE
-    pen.line([(CX - 2.5, MOUTH_Y - 0.5), (CX - 1.5, MOUTH_Y), (CX + 1.5, MOUTH_Y), (CX + 2.5, MOUTH_Y - 0.5)], fill=m)
+    if TURN == 0:
+        pen.line([(CX + 0.5, NOSE_Y - 1), (CX, NOSE_Y)], fill=nose)
+    else:
+        # the nose sticks out, so its tip slides past the centre line
+        tip = (turn_x(CX, face_z(CX, NOSE_Y) + 2.6), NOSE_Y)
+        top = (turn_x(CX + 0.4, face_z(CX, NOSE_Y - 2.2) + 1.4), NOSE_Y - 2.2)
+        pen.line([top, tip], fill=nose)
+        if color:
+            pen.line([(tip[0] + 0.6, NOSE_Y + 0.6), (tip[0] + 1.6, NOSE_Y + 0.6)], fill=SKIN_SHADE)
+    mouth = [(CX - 2.5, MOUTH_Y - 0.5), (CX - 1.5, MOUTH_Y), (CX + 1.5, MOUTH_Y), (CX + 2.5, MOUTH_Y - 0.5)]
+    pen.line(warp(mouth, face_z), fill=LIP if color else LINE)
     if color:
-        pen.line([(CX - 1, MOUTH_Y + 1), (CX + 1, MOUTH_Y + 1)], fill=(236, 196, 190))
+        pen.line(warp([(CX - 1, MOUTH_Y + 1), (CX + 1, MOUTH_Y + 1)], face_z), fill=LIP_HI)
+
+
+def jaw_shade(side):
+    """Soft shade line just inside the jaw outline."""
+    pts = []
+    for y, inset in ((60, 0.7), (64.8, 1.2), (68.6, 1.25), (71, 1.6)):
+        lo, hi = silhouette(y)
+        pts.append((CX + (lo + inset if side < 0 else hi - inset), y))
+    return smooth(pts, n=4, closed=False)
+
+
+def face_shading(pen):
+    only = {SKIN}
+    for c in bang_clumps(BANGS) + bang_clumps(BANGS_BACK):     # bangs cast a soft shadow
+        pen.poly_clip([(x, y + 1.5) for x, y in clump(*c)], SKIN_SHADE, only)
+    for side in (-1, 1):
+        pen.line_clip(jaw_shade(side), SKIN_SHADE, only)
+    edge = smooth(LOCK_EDGE, n=6, closed=False)                 # side locks shade the cheeks
+    pen.line_clip(warp(edge, lock_z), SKIN_SHADE, only)
+    pen.line_clip(warp(mirror(edge), lock_z), SKIN_SHADE, only)
+    if TURN:
+        # the side of the face turning away from the light falls into shadow
+        f = abs(TURN) / 15
+        outer, inner = [], []
+        for i in range(53):
+            y = 45 + i * 0.5
+            lo, hi = silhouette(y)
+            w = (1.9 - 0.9 * (y - 45) / 26) * f
+            if TURN > 0:
+                outer.append((CX + hi + 0.6, y))
+                inner.append((CX + hi - w, y))
+            else:
+                outer.append((CX + lo - 0.6, y))
+                inner.append((CX + lo + w, y))
+        pen.poly_clip(outer + inner[::-1], SKIN_SHADE, only)
+    for side in (-1, 1):                                        # blush follows the cheek
+        bx = CX + side * 13
+        z = lambda x: face_z(x, 58.25)
+        l, r = turn_x(bx - 3.5, z(bx - 3.5)), turn_x(bx + 3.5, z(bx + 3.5))
+        pen.poly_clip(ellipse_pts(l, 57, r, 59.5), BLUSH, {SKIN, SKIN_SHADE})
+        for k in range(3):
+            x0 = bx - 2 + k * 1.6
+            pen.line_clip([(turn_x(x0, z(x0)), 57.6), (turn_x(x0 - 0.8, z(x0 - 0.8)), 58.8)], BLUSH_LINE, {BLUSH})
+
+
+# ------------------------------------------------------------------ guides
+INSET = (70, 25, 5)   # small top-view sketch of the head: centre x, y, radius (grid)
 
 
 def guides(pen, faint):
     red = GUIDE_FAINT if faint else GUIDE_RED
     blue = GUIDE_FAINT if faint else GUIDE_BLUE
-    pen.ellipse((19, 15, 61, 57), outline=blue)
-    pen.line([(19, 44), (CX, CHIN), (61, 44)], fill=blue)   # two lines meeting at the chin
-    pen.line([(CX, 8), (CX, 92)], fill=red)
+    pen.ellipse((19, 15, 61, 57), outline=blue)                 # skull: a ball looks the same from any side
+    lo, hi = silhouette(44)
+    chin = chin_point()
+    pen.line([(CX + lo, 44), chin, (CX + hi, 44)], fill=blue)   # two lines meeting at the chin
+    pen.line([(CX, 8)] + center_line() + [(chin[0], 92)], fill=red)   # centre line bends with the turn
     for y in (EYE_Y, NOSE_Y, MOUTH_Y):
         pen.line([(12, y), (68, y)], fill=blue)
     pen.line([(12, TOP), (68, TOP)], fill=red)
     pen.line([(12, CHIN), (68, CHIN)], fill=red)
 
 
+def turn_inset(pen):
+    """Head seen from above: where 'straight ahead' is, and where the face points now."""
+    cx, cy, r = INSET
+    pen.ellipse((cx - r, cy - r, cx + r, cy + r), outline=GUIDE_BLUE)
+    pen.line([(cx, cy), (cx, cy + r + 3)], fill=GUIDE_FAINT)
+    t = math.radians(TURN)
+    dx, dy = -math.sin(t), math.cos(t)
+    pen.line([(cx, cy), (cx + dx * (r + 3), cy + dy * (r + 3))], fill=GUIDE_RED)
+    nx, ny = cx + dx * r, cy + dy * r
+    pen.poly([(nx - dy * 1.2, ny + dx * 1.2), (nx + dx * 1.6, ny + dy * 1.6), (nx + dy * 1.2, ny - dx * 1.2)],
+             fill=GUIDE_BLUE)
+
+
+# ------------------------------------------------------------------ hair
 def hair_front(pen, step):
     color = step == 4
     hf = HAIR if color else BG
-    pen.poly(SIDE_L, fill=hf, outline=LINE)
-    pen.poly(SIDE_R, fill=hf, outline=LINE)
-    pen.poly(CROWN, fill=hf, outline=LINE)
+    pen.poly(warp(SIDE_L, lock_z), fill=hf, outline=LINE)
+    pen.poly(warp(SIDE_R, lock_z), fill=hf, outline=LINE)
+    pen.poly(crown_poly(), fill=hf, outline=LINE)
     pen.poly([(20.5, 25), (59.5, 25), (63, 32), (17, 32)], fill=hf)
-    for c in BANGS:
+    # back layer of bangs
+    back = bang_clumps(BANGS_BACK)
+    for c in back:
+        pen.poly(clump(*c), fill=HAIR_SHADE if color else BG)
+    for c in back:
+        pts = clump(*c)
+        pen.line(pts[len(pts) // 3:], fill=LINE)
+    # front layer of bangs
+    front = bang_clumps(BANGS)
+    for c in front:
         pen.poly(clump(*c), fill=hf)
     if color:
         # each clump: darker core toward the tip, lighter rim on one side = rounded volume
-        for rl, rr, tx, ty in BANGS:
+        for rl, rr, tx, ty in front:
             cx = (rl + rr) / 2
             y0 = (24 + ty) / 2
             pen.poly(smooth([(cx - 0.6 + (tx - cx) * 0.4, y0), (cx + (tx - cx) * 0.7, (y0 + ty) / 2 + 1), (tx, ty - 1.2)],
                             n=5, closed=False) + [(cx + 1 + (tx - cx) * 0.4, y0)], fill=HAIR_SHADE)
             pen.line(smooth([(rl + 1.4, 23.5), (rl + 1.8 + (tx - cx) * 0.3, (23 + ty) / 2), (tx - 0.4, ty - 3)],
                             n=5, closed=False), fill=HAIR_MID)
-        # big soft volume shadows where the crown curves away
         # side locks: shaded inner half, highlight curve following the S
-        pen.line(smooth([(21, 36), (22.5, 48), (21, 62), (20.5, 74)], n=6, closed=False), fill=HAIR_SHADE)
-        pen.line(smooth([(18, 40), (19.2, 52), (18.6, 64), (19.2, 76)], n=6, closed=False), fill=HAIR_MID)
-        pen.line(mirror(smooth([(21, 36), (22.5, 48), (21, 62), (20.5, 74)], n=6, closed=False)), fill=HAIR_SHADE)
-        pen.line(mirror(smooth([(18, 40), (19.2, 52), (18.6, 64), (19.2, 76)], n=6, closed=False)), fill=HAIR_MID)
-    for c in BANGS:
+        for pts, c in ((LOCK_SHADE, HAIR_SHADE), (LOCK_HI, HAIR_MID)):
+            ln = smooth(pts, n=6, closed=False)
+            pen.line(warp(ln, lock_z), fill=c)
+            pen.line(warp(mirror(ln), lock_z), fill=c)
+    for c in front:
         pts = clump(*c)
         pen.line(pts[len(pts) // 3:], fill=LINE)
+    # one thin strand falling between the eyes
+    strand = smooth(warp([(43.5, 23), (42.6, 34), (41.7, 44), (41.3, 51)], bang_z), n=6, closed=False)
+    pen.line(strand, fill=HAIR if color else LINE)
     # strand flow from the part, curving with the dome
     flow = HAIR_SHADE if color else GUIDE_FAINT
-    for x in (21, 27, 33, 54, 59, 62):
+    for x, y_end in FLOW:
         side = -1 if x < 44 else 1
         mid = (44 + side * 6 + x) / 2
-        pen.line(smooth([(44 + side * 0.5, 14), (mid, 16 + abs(x - 44) * 0.25), (x, 29)], n=6, closed=False), fill=flow)
-    pen.line([(44, 12.5), (44, 19)], fill=LINE)          # the part
-    pen.line(smooth([(43, 13), (42, 10), (43.5, 8), (46.5, 8.8)], n=5, closed=False), fill=LINE)   # ahoge
+        ctrl = [(44 + side * 0.5, 14), (mid, 16 + abs(x - 44) * 0.25), (x, y_end)]
+        pen.line(smooth(warp(ctrl, shell_z), n=6, closed=False), fill=flow)
+    pen.line(warp([(44, 12.5 + i * 0.5) for i in range(14)], shell_z), fill=LINE)      # the part
+    dx = turn_x(43, shell_z(43, 13)) - 43                                                # ahoge rides along
+    pen.line(smooth([(43 + dx, 13), (42 + dx, 10), (43.5 + dx, 8), (46.5 + dx, 8.8)], n=5, closed=False), fill=LINE)
 
 
 HAIR_RAMP = [HAIR_DEEP, HAIR_SHADE, HAIR, HAIR_MID, HAIR_HI, HAIR_SHINE]
@@ -276,20 +582,26 @@ def hair_light(pen, img):
     1. light at the top, darker toward the ends (banded gradient)
     2. a glow band across the hair...
     3. ...cut by the strand lines ("eraser")...
-    4. ...and smudged into streaks along the strands ("blur + finger tip")."""
+    4. ...and smudged into streaks along the strands ("blur + finger tip").
+    Plus a thin rim light on the lit (left) edge of the silhouette."""
     ox, oy = pen.ox, pen.oy
     W, H = PW, PH
     px = img.load()
     hair = {c: i for i, c in enumerate(HAIR_RAMP)}
 
-    # 1. gradient: shift each hair pixel along the ramp by height
+    # 1. gradient: shift each hair pixel along the ramp by height. The boundaries wave and
+    #    jitter per column so they read as strand ends instead of a straight cut.
+    wob = random.Random(3)
+    top_cut, low_cut = [], []
+    for x in range(W):
+        top_cut.append(16.2 + 1.2 * math.sin(x / 2.3) + wob.uniform(-0.8, 0.8))
+        low_cut.append(63 + 2.2 * math.sin(x / 3.1) + 1.3 * math.sin(x / 1.4 + 1) + wob.uniform(-1.2, 1.2))
     for y in range(H):
         gy = y / K
         for x in range(W):
-            checker = (x + y) % 2 == 0
-            if gy < 15 or (gy < 18 and checker):
+            if gy < top_cut[x]:
                 shift = 1
-            elif gy < 60 or (gy < 66 and checker):
+            elif gy < low_cut[x]:
                 shift = 0
             else:
                 shift = -1
@@ -333,61 +645,76 @@ def hair_light(pen, img):
     # softer second glow on the long hair lengths
     band(lambda gx: 54 + ((gx - 40) / 30) ** 2 * 3, (int(4 * K), int(76 * K)), half=1.5)
 
+    # rim light: first hair pixel inside the outline on the left edge
+    for y in range(int(16 * K), H):
+        for x in range(W - 1):
+            c = px[ox + x, oy + y]
+            if c == BG:
+                continue
+            if c == LINE:
+                n = px[ox + x + 1, oy + y]
+                if n in hair and hair[n] < hair[HAIR_MID]:
+                    px[ox + x + 1, oy + y] = HAIR_MID
+            break
 
+
+# ------------------------------------------------------------------ panels
 def panel(img, ox, oy, step):
     pen = Pen(ImageDraw.Draw(img), ox, oy, img)
+    face = face_outline()
+    neck = neck_warp(NECK)
     if step == 1:
         guides(pen, faint=False)
-        pen.poly(FACE, outline=GUIDE_BLUE)
-        pen.poly(NECK, outline=GUIDE_BLUE)
+        pen.poly(face, outline=GUIDE_BLUE)
+        pen.poly(neck, outline=GUIDE_BLUE)
         pen.line(SHOULDERS[1:-1], fill=GUIDE_BLUE)
+        if TURN:
+            turn_inset(pen)
         return
     color = step == 4
     if not color:
         guides(pen, faint=True)
-    # back hair + clothes
+    # back hair
     if step >= 3:
         pen.poly(BACK_HAIR, fill=HAIR_SHADE if color else BG, outline=LINE)
-        strands = ([(15, 40), (13.5, 56), (11.5, 72), (9.5, 88)], [(17.5, 46), (16, 62), (15, 78), (14, 94)],
-                   [(13, 60), (11, 75), (8.5, 88)], [(19, 62), (19, 78), (20, 92)])
         if color:
             pen.poly(smooth([(22, 56), (58, 56), (55, 86), (25, 86)], n=4), fill=HAIR_DEEP)
-            for k, pts in enumerate(strands):
+            for k, pts in enumerate(BACK_STRANDS):
                 c = HAIR_MID if k == 1 else HAIR
-                pen.line(smooth(pts, n=6, closed=False), fill=c)
-                pen.line(mirror(smooth(pts, n=6, closed=False)), fill=c)
+                ln = smooth(pts, n=6, closed=False)
+                for side_ln in (ln, mirror(ln)):
+                    pen.line(side_ln, fill=c)                                       # lit ridge
+                    pen.line([(x + 0.6, y) for x, y in side_ln], fill=HAIR_DEEP)    # its shadow side
         else:
-            for pts in strands[:2]:
-                pen.line(smooth(pts, n=6, closed=False), fill=GUIDE_FAINT)
-                pen.line(mirror(smooth(pts, n=6, closed=False)), fill=GUIDE_FAINT)
+            for pts in BACK_STRANDS[:2]:
+                ln = smooth(pts, n=6, closed=False)
+                pen.line(ln, fill=GUIDE_FAINT)
+                pen.line(mirror(ln), fill=GUIDE_FAINT)
+    # clothes
     if color:
         pen.poly(SHOULDERS, fill=CLOTH, outline=LINE)
         pen.line([(8, 90), (22, 85.5), (34.5, 81.5)], fill=CLOTH_HI)
         pen.line(mirror([(8, 90), (22, 85.5), (34.5, 81.5)]), fill=CLOTH_HI)
     else:
         pen.line(SHOULDERS[1:-1], fill=LINE)
-    pen.poly(NECK, fill=SKIN if color else BG, outline=LINE)
+    # neck
+    pen.poly(neck, fill=SKIN if color else BG, outline=LINE)
     if color:
-        pen.poly([(35.5, 64), (44.5, 64), (44.8, 70), (40, 73.5), (35.2, 70)], fill=SKIN_SHADE)
-        pen.poly([(34.5, 79), (45.5, 79), (45.5, 81), (34.5, 81)], fill=SKIN_SHADE)
+        pen.poly_clip([(x, y + 1.4) for x, y in face if y >= 62], SKIN_SHADE, {SKIN})   # under the chin
+        pen.poly_clip([(34.5, 79), (45.5, 79), (45.5, 81), (34.5, 81)], SKIN_SHADE, {SKIN})
+        if TURN:   # neck muscle shows on the side that turns away
+            pen.line_clip([(CX + 4.2 + neck_shift(69), 69), (CX + 0.8, 80.5)], SKIN_SHADE, {SKIN})
+    # ears and face
     skin = SKIN if color else BG
-    pen.poly(EAR_L, fill=skin, outline=LINE)
-    pen.poly(EAR_R, fill=skin, outline=LINE)
+    for side in ((-1, 1) if step < 3 else ()):            # long hair covers the ears later
+        pts = EAR_L if side < 0 else mirror(EAR_L)
+        pen.poly(ear_map(pts, side), fill=skin, outline=LINE)
+        if color:
+            sh = EAR_SHADE_L if side < 0 else mirror(EAR_SHADE_L)
+            pen.line(ear_map(sh, side), fill=SKIN_SHADE2)
+    pen.poly(face, fill=skin, outline=LINE)
     if color:
-        pen.line([(17.8, 48), (17.6, 54)], fill=SKIN_SHADE2)
-        pen.line(mirror([(17.8, 48), (17.6, 54)]), fill=SKIN_SHADE2)
-    pen.poly(FACE, fill=skin, outline=LINE)
-    if color:
-        for c in BANGS:  # bangs cast a soft shadow on the forehead
-            rl, rr, tx, ty = c
-            pen.poly([(x, y + 1.5) for x, y in clump(*c)], fill=SKIN_SHADE)
-        # soft cheek shade along the jaw and blush
-        pen.line([(23, 60), (27, 64.8), (32, 68.6), (37, 71)], fill=SKIN_SHADE)
-        pen.line(mirror([(23, 60), (27, 64.8), (32, 68.6), (37, 71)]), fill=SKIN_SHADE)
-        for x in (CX - 13, CX + 13):
-            pen.ellipse((x - 3.5, 57, x + 3.5, 59.5), fill=BLUSH)
-            for k in range(3):
-                pen.line([(x - 2 + k * 1.6, 57.6), (x - 2.8 + k * 1.6, 58.8)], fill=(236, 160, 164))
+        face_shading(pen)
     if step >= 3:
         hair_front(pen, step)
         if color:
@@ -395,32 +722,64 @@ def panel(img, ox, oy, step):
     features(pen, color)       # eyes and brows sit on top of the bangs
 
 
-def main():
+def render(turn, name, title, labels):
+    global TURN
+    TURN = turn
+    cells = ((0, 0), (PW, 0), (0, PH), (PW, PH))
     sheet = Image.new("RGB", (PW * 2, PH * 2), BG)
-    for k, (ox, oy) in enumerate(((0, 0), (PW, 0), (0, PH), (PW, PH)), start=1):
+    for k, (ox, oy) in enumerate(cells, start=1):
         panel(sheet, ox, oy, k)
-    sheet.save("face_study_raw.png")
+    sheet.save(f"{name}_raw.png")
     big = sheet.resize((PW * 2 * SCALE, PH * 2 * SCALE), Image.NEAREST)
 
     bar = 80
     out = Image.new("RGB", (big.width, big.height + bar), BG)
     out.paste(big, (0, bar))
     d = ImageDraw.Draw(out)
-    d.text((24, 22), "Anime face construction - pixel study", fill=LINE, font=ImageFont.load_default(size=36))
+    d.text((24, 22), title, fill=LINE, font=ImageFont.load_default(size=36))
     small = ImageFont.load_default(size=26)
-    labels = ["1  Guides: circle, chin lines, eye line",
-              "2  Features: eyes, nose, mouth, ears",
-              "3  Hair: crown, bangs, side locks",
-              "4  Color + shading"]
-    for k, (ox, oy) in enumerate(((0, 0), (PW, 0), (0, PH), (PW, PH))):
+    for k, (ox, oy) in enumerate(cells):
         x, y = ox * SCALE + 14, bar + oy * SCALE + 10
         l, t, r, bt = d.textbbox((x, y), labels[k], font=small)
         d.rectangle((l - 6, t - 4, r + 6, bt + 4), fill=BG)
         d.text((x, y), labels[k], fill=(170, 90, 100), font=small)
+    if turn:
+        tiny = ImageFont.load_default(size=19)
+        cx, cy, r = INSET
+        for i, txt in enumerate(("top view", f"{turn:g}° turn")):
+            l, t, rr, bt = d.textbbox((0, 0), txt, font=tiny)
+            x = cx * K * SCALE - (rr - l) / 2
+            y = bar + (cy + r + 3.8) * K * SCALE + i * 22
+            d.text((x, y), txt, fill=(170, 90, 100), font=tiny)
     d.line((PW * SCALE, bar, PW * SCALE, out.height), fill=(210, 205, 210), width=2)
     d.line((0, bar + PH * SCALE, out.width, bar + PH * SCALE), fill=(210, 205, 210), width=2)
-    out.save("face_study.png")
-    print("saved", out.size)
+    out.save(f"{name}.png")
+    print("saved", name, out.size)
+
+
+def main():
+    render(0, "face_study", "Anime face construction - pixel study",
+           ["1  Guides: circle, chin lines, eye line",
+            "2  Features: eyes, nose, mouth, ears",
+            "3  Hair: crown, bangs, side locks",
+            "4  Color + shading"])
+    render(15, "face_study_turn15", "Head turned 15° - pixel study",
+           ["1  Guides: curved center line",
+            "2  Features: far side squeezes",
+            "3  Hair: bangs + part turn too",
+            "4  Color + shading"])
+    # side-by-side of the two finished portraits
+    z = 4
+    pair = Image.new("RGB", (PW * z * 2 + 24, PH * z + 70), BG)
+    d = ImageDraw.Draw(pair)
+    font = ImageFont.load_default(size=30)
+    for i, (name, label) in enumerate((("face_study", "front"), ("face_study_turn15", "turned 15°"))):
+        raw = Image.open(f"{name}_raw.png").crop((PW, PH, PW * 2, PH * 2))
+        x = i * (PW * z + 24)
+        pair.paste(raw.resize((PW * z, PH * z), Image.NEAREST), (x, 70))
+        d.text((x + 16, 20), label, fill=(170, 90, 100), font=font)
+    pair.save("face_turn_compare.png")
+    print("saved face_turn_compare", pair.size)
 
 
 main()
