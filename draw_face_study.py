@@ -9,6 +9,7 @@ Proportions follow the classic anime head guide:
 - ears between eye line and nose, short slim neck
 """
 import math
+import random
 from PIL import Image, ImageDraw, ImageFont
 
 K = 2                      # detail multiplier
@@ -28,8 +29,8 @@ HAIR = (78, 62, 92)
 HAIR_SHADE = (54, 42, 66)
 HAIR_DEEP = (38, 30, 48)
 HAIR_MID = (100, 82, 118)
-HAIR_HI = (146, 126, 170)
-HAIR_SHINE = (190, 176, 210)
+HAIR_HI = (156, 136, 184)
+HAIR_SHINE = (214, 202, 232)
 IRIS = [(24, 30, 66), (30, 40, 82), (38, 54, 104), (50, 74, 130), (66, 100, 160),
         (88, 132, 192), (118, 168, 220), (150, 196, 236)]
 PUPIL = (16, 18, 40)
@@ -264,13 +265,73 @@ def hair_front(pen, step):
         pen.line(smooth([(44 + side * 0.5, 14), (mid, 16 + abs(x - 44) * 0.25), (x, 29)], n=6, closed=False), fill=flow)
     pen.line([(44, 12.5), (44, 19)], fill=LINE)          # the part
     pen.line(smooth([(43, 13), (42, 10), (43.5, 8), (46.5, 8.8)], n=5, closed=False), fill=LINE)   # ahoge
-    if color:
-        # angel-ring shine, broken into soft strands that follow the dome
-        box = pen.P([(19, 17), (61, 46)])
-        box2 = pen.P([(20.5, 18.5), (59.5, 46)])
-        for a0, a1 in ((200, 228), (234, 262), (272, 300), (308, 338)):
-            pen.d.arc((box[0][0], box[0][1], box[1][0], box[1][1]), a0, a1, fill=HAIR_HI, width=2)
-            pen.d.arc((box2[0][0], box2[0][1], box2[1][0], box2[1][1]), a0 + 5, a1 - 7, fill=HAIR_SHINE)
+
+
+HAIR_RAMP = [HAIR_DEEP, HAIR_SHADE, HAIR, HAIR_MID, HAIR_HI, HAIR_SHINE]
+STRAND_LINES = (HAIR_DEEP, HAIR_SHADE, LINE)
+
+
+def hair_light(pen, img):
+    """Hair shading in the style of the 'add glow' technique:
+    1. light at the top, darker toward the ends (banded gradient)
+    2. a glow band across the hair...
+    3. ...cut by the strand lines ("eraser")...
+    4. ...and smudged into streaks along the strands ("blur + finger tip")."""
+    ox, oy = pen.ox, pen.oy
+    W, H = PW, PH
+    px = img.load()
+    hair = {c: i for i, c in enumerate(HAIR_RAMP)}
+
+    # 1. gradient: shift each hair pixel along the ramp by height
+    for y in range(H):
+        gy = y / K
+        for x in range(W):
+            checker = (x + y) % 2 == 0
+            if gy < 15 or (gy < 18 and checker):
+                shift = 1
+            elif gy < 60 or (gy < 66 and checker):
+                shift = 0
+            else:
+                shift = -1
+            if shift == 0:
+                continue
+            c = px[ox + x, oy + y]
+            if c in hair and c != HAIR_DEEP:
+                px[ox + x, oy + y] = HAIR_RAMP[max(0, min(len(HAIR_RAMP) - 2, hair[c] + shift))]
+
+    rng = random.Random(7)
+
+    def band(center_y, x_range, half=2.5):
+        """Glow band whose centre follows center_y(gx); streaks up and down per column."""
+        for x in range(*x_range):
+            gx = x / K
+            cy = center_y(gx) * K
+            up = rng.choice((2, 3, 3, 4, 5, 6))
+            down = rng.choice((3, 4, 6, 7, 9, 11))
+            if rng.random() < 0.18:          # some columns barely shine
+                up, down = 1, 2
+            for y in range(int(cy - half - up), int(cy + half + down) + 1):
+                if not (0 <= y < H):
+                    continue
+                c = px[ox + x, oy + y]
+                if c not in hair or c in STRAND_LINES:
+                    continue                 # strand lines cut the glow
+                dy = y - cy
+                if abs(dy) <= half * 0.5:
+                    nc = HAIR_SHINE
+                elif abs(dy) <= half:
+                    nc = HAIR_HI
+                elif (dy < 0 and -dy - half <= up * 0.5) or (dy > 0 and dy - half <= down * 0.45):
+                    nc = HAIR_HI
+                else:
+                    nc = HAIR_MID
+                if hair[nc] > hair[c]:
+                    px[ox + x, oy + y] = nc
+
+    # glow ring around the crown, curving down toward the sides of the head
+    band(lambda gx: 23 + ((gx - 40) / 23) ** 2 * 7, (int(17 * K), int(63 * K)), half=3)
+    # softer second glow on the long hair lengths
+    band(lambda gx: 54 + ((gx - 40) / 30) ** 2 * 3, (int(4 * K), int(76 * K)), half=1.5)
 
 
 def panel(img, ox, oy, step):
@@ -329,6 +390,8 @@ def panel(img, ox, oy, step):
                 pen.line([(x - 2 + k * 1.6, 57.6), (x - 2.8 + k * 1.6, 58.8)], fill=(236, 160, 164))
     if step >= 3:
         hair_front(pen, step)
+        if color:
+            hair_light(pen, img)
     features(pen, color)       # eyes and brows sit on top of the bangs
 
 
