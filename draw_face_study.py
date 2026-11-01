@@ -142,8 +142,8 @@ def eye(pen, cx, flip, color):
     X = lambda dx: round(pen.ox + (cx * K) + s * dx)
     Y = lambda dy: round(pen.oy + (EYE_Y + 1) * K + dy)
     d = pen.d
-    w = 13                                      # half-width in hi-res pixels
-    h_top, h_bot = 0, 20
+    w = 11                                      # half-width in hi-res pixels
+    h_top, h_bot = 0, 17
     # eye opening shape: flat-ish top, rounded bottom
     def inside(dx, dy):
         if dy < 1 or dy > h_bot:
@@ -151,7 +151,7 @@ def eye(pen, cx, flip, color):
         t = dy / h_bot
         half = w * math.sqrt(max(0.0, 1 - max(0.0, (t - 0.45) / 0.55) ** 2))
         return -w + (1 if dy < 3 else 0) <= dx <= half
-    icx, icy, irx, iry = 1, 10.5, 7.5, 10.5     # iris ellipse
+    icx, icy, irx, iry = 1, 9, 6.5, 9           # iris ellipse
     for dy in range(1, h_bot + 1):
         for dx in range(-w, w + 1):
             if not inside(dx, dy):
@@ -163,7 +163,7 @@ def eye(pen, cx, flip, color):
                     c = IRIS[min(int(dy / h_bot * len(IRIS)), len(IRIS) - 1)]
                     if ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 > 0.78:
                         c = IRIS[0]                             # dark rim
-                    if ((dx - icx) / 3.6) ** 2 + ((dy - 9) / 5.5) ** 2 <= 1:
+                    if ((dx - icx) / 3.1) ** 2 + ((dy - 7.5) / 4.6) ** 2 <= 1:
                         c = PUPIL
                     if dy <= 4:
                         c = IRIS[0]                             # lid shadow
@@ -171,15 +171,15 @@ def eye(pen, cx, flip, color):
                 c = BG
                 if in_iris and ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 > 0.72:
                     c = LINE
-                if ((dx - icx) / 3.6) ** 2 + ((dy - 9) / 5.5) ** 2 <= 1:
+                if ((dx - icx) / 3.1) ** 2 + ((dy - 7.5) / 4.6) ** 2 <= 1:
                     c = LINE
             d.point((X(dx), Y(dy)), fill=c)
     # highlights
     hl = WHITE
-    for dx, dy in ((-2, 5), (-3, 5), (-2, 6), (-3, 6), (-2, 7), (-3, 7), (-1, 6), (-4, 6)):
+    for dx, dy in ((-2, 4), (-3, 4), (-2, 5), (-3, 5), (-2, 6), (-3, 6), (-1, 5)):
         d.point((X(dx), Y(dy)), fill=hl)
     if color:
-        for dx, dy in ((3, 16), (4, 16), (3, 17), (5, 16)):
+        for dx, dy in ((3, 13), (4, 13), (3, 14)):
             d.point((X(dx), Y(dy)), fill=(210, 230, 250))
     # thick upper lash, arched, heaviest and flicked at the outer corner
     for dx in range(-w - 1, w + 2):
@@ -207,8 +207,8 @@ def eye(pen, cx, flip, color):
 
 
 def features(pen, color):
-    eye(pen, CX - 11, False, color)
-    eye(pen, CX + 11, True, color)
+    eye(pen, CX - 10.5, False, color)
+    eye(pen, CX + 10.5, True, color)
     nose = SKIN_SHADE2 if color else LINE
     pen.line([(CX + 0.5, NOSE_Y - 1), (CX, NOSE_Y)], fill=nose)
     m = LIP if color else LINE
