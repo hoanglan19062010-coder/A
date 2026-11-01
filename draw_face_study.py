@@ -36,20 +36,22 @@ def arc(cx, cy, r, a0, a1, n=24):
             for a in [a0 + (a1 - a0) * k / n for k in range(n + 1)]]
 
 
-FACE = arc(CX, 36, 20, 180, 360) + [(60, 44), (59, 52), (56, 62), (49, 70), (40, 74),
-                                    (31, 70), (24, 62), (21, 52), (20, 44)]
+FACE = arc(CX, 36, 20, 180, 360) + [(60, 44), (60, 53), (57, 62), (51, 69), (44, 73), (40, 74),
+                                    (36, 73), (29, 69), (23, 62), (20, 53), (20, 44)]
 EAR_L = [(21, 45), (17, 46), (16, 50), (18, 55), (21, 57)]
 EAR_R = [(2 * CX - x, y) for x, y in EAR_L]
-NECK = [(34, 64), (46, 64), (47, 86), (33, 86)]
+NECK = [(35, 66), (45, 66), (46, 81), (34, 81)]
 
-BACK_HAIR = [(18, 26), (14, 44), (12, 70), (8, 92), (14, 88), (17, 97), (21, 90), (24, 96), (22, 74), (20, 50),
-             (60, 50), (58, 74), (56, 96), (59, 90), (63, 97), (66, 88), (72, 92), (68, 70), (66, 44), (62, 26)]
+BACK_HAIR = [(18, 22), (14, 30), (14, 36), (11, 44), (12, 52), (9, 62), (10, 70), (7, 80),
+             (8, 86), (4, 96), (11, 92), (14, 99), (19, 93), (24, 98), (28, 90), (40, 88),
+             (52, 90), (56, 98), (61, 93), (66, 99), (69, 92), (76, 96), (72, 86), (73, 80),
+             (70, 70), (71, 62), (68, 52), (69, 44), (66, 36), (66, 30), (62, 22)]
 CROWN = (17, 11, 63, 50)
 # bangs clumps from a part slightly right of centre: (root_l, root_r, tip_x, tip_y)
-BANGS = [(20, 27, 22, 46), (25, 32, 28, 41), (30, 37, 33, 44), (35, 41, 37, 40),
-         (39, 45, 41, 47), (43, 49, 46, 42), (47, 54, 51, 45), (52, 58, 55, 40),
-         (56, 61, 59, 46)]
-SIDE_L = [(19, 30), (24, 36), (23, 52), (21, 66), (18, 76), (18, 54)]
+BANGS = [(20, 27, 22, 47), (25, 32, 28, 41), (30, 37, 33, 44), (35, 41, 37, 40),
+         (39, 45, 41, 46), (43, 49, 46, 42), (47, 54, 51, 44), (52, 58, 55, 40),
+         (56, 61, 59, 47)]
+SIDE_L = [(19, 30), (24, 36), (24, 50), (22, 62), (20, 70), (22, 80), (19, 76), (16, 83), (16, 70), (17, 56), (16, 44)]
 SIDE_R = [(2 * CX - x, y) for x, y in SIDE_L]
 
 
@@ -67,7 +69,7 @@ def eye(d, x0, oy, flip, color):
     """12px wide anime eye. x0 = outer corner of the left eye (mirrored when flip)."""
     xs = (lambda i: x0 + 11 - i) if flip else (lambda i: x0 + i)
     p = lambda i, y, c: d.point((xs(i), oy + y), fill=c)
-    top = EYE_Y - 2
+    top = EYE_Y + 1
     if color:
         for y in range(top + 1, top + 9):
             for i in range(1, 11):
@@ -145,15 +147,15 @@ def panel(img, ox, oy, step):
         return
     if step == 4:
         d.polygon(off(BACK_HAIR, ox, oy), fill=HAIR_SHADE, outline=LINE)
-        d.polygon([(ox + 4, oy + 100), (ox + 10, oy + 90), (ox + 33, oy + 84), (ox + 47, oy + 84),
-                   (ox + 70, oy + 90), (ox + 76, oy + 100)], fill=CLOTH, outline=LINE)
+        d.polygon([(ox + 2, oy + 100), (ox + 8, oy + 88), (ox + 34, oy + 80), (ox + 46, oy + 80),
+                   (ox + 72, oy + 88), (ox + 78, oy + 100)], fill=CLOTH, outline=LINE)
     else:
         guides(d, ox, oy, faint=True)
     fill = SKIN if step == 4 else BG
     d.polygon(off(NECK, ox, oy), fill=SKIN_SHADE if step == 4 else None, outline=LINE)
     if step < 4:
-        d.line((ox + 33, oy + 84, ox + 8, oy + 92), fill=LINE)
-        d.line((ox + 47, oy + 84, ox + 72, oy + 92), fill=LINE)
+        d.line((ox + 34, oy + 80, ox + 8, oy + 89), fill=LINE)
+        d.line((ox + 46, oy + 80, ox + 72, oy + 89), fill=LINE)
     d.polygon(off(EAR_L, ox, oy), fill=fill, outline=LINE)
     d.polygon(off(EAR_R, ox, oy), fill=fill, outline=LINE)
     d.polygon(off(FACE, ox, oy), fill=fill, outline=LINE)
@@ -162,7 +164,7 @@ def panel(img, ox, oy, step):
         for c in BANGS:  # shadow of bangs on forehead
             d.polygon([(x, y + 2) for x, y in clump(*c, ox, oy)], fill=SKIN_SHADE)
         for x in (26, 54):
-            d.line((ox + x - 2, oy + 54, ox + x + 1, oy + 54), fill=(248, 196, 196))  # blush
+            d.line((ox + x - 2, oy + 57, ox + x + 1, oy + 57), fill=(248, 196, 196))  # blush
     features(d, ox, oy, color=(step == 4))
     if step >= 3:
         hf = HAIR if step == 4 else BG
@@ -172,9 +174,16 @@ def panel(img, ox, oy, step):
             d.polygon(off(EAR_L, ox, oy), fill=BG, outline=LINE)
             d.polygon(off(EAR_R, ox, oy), fill=BG, outline=LINE)
             features(d, ox, oy, color=False)
-        d.chord((ox + CROWN[0], oy + CROWN[1], ox + CROWN[2], oy + CROWN[3]), 180, 360, fill=hf)
-        d.arc((ox + CROWN[0], oy + CROWN[1], ox + CROWN[2], oy + CROWN[3]), 180, 360, fill=LINE)
-        d.rectangle((ox + 19, oy + 22, ox + 61, oy + 30), fill=hf)
+        crown = [(ox + 17, oy + 32)]
+        for k in range(19):
+            a = math.radians(180 + k * 10)
+            r = 1.0 + (0.07 if k % 2 else 0.0)
+            crown.append((round(ox + 40 + 23 * r * math.cos(a)), round(oy + 31 + 19 * r * math.sin(a))))
+        crown.append((ox + 63, oy + 32))
+        d.polygon(crown, fill=hf, outline=LINE)
+        # loose flyaway strands on top
+        d.line((ox + 42, oy + 12, ox + 41, oy + 9, ox + 43, oy + 7, ox + 46, oy + 8), fill=LINE)
+        d.rectangle((ox + 18, oy + 22, ox + 62, oy + 31), fill=hf)
         d.polygon(off(SIDE_L, ox, oy), fill=hf, outline=LINE)
         d.polygon(off(SIDE_R, ox, oy), fill=hf, outline=LINE)
         for c in BANGS:
@@ -188,6 +197,12 @@ def panel(img, ox, oy, step):
             d.line((ox + 44, oy + 14, ox + x, oy + 30), fill=HAIR_SHADE if step == 4 else GUIDE_FAINT)
         if step == 4:
             d.arc((ox + 22, oy + 15, ox + 58, oy + 40), 200, 330, fill=HAIR_HI)
+            d.arc((ox + 24, oy + 17, ox + 56, oy + 40), 215, 315, fill=HAIR_HI)
+            for pts in ([(14, 40), (12, 60), (9, 82)], [(66, 40), (68, 60), (71, 82)],
+                        [(18, 56), (17, 74)], [(62, 56), (63, 74)]):
+                d.line([(ox + x, oy + y) for x, y in pts], fill=HAIR)
+            for pts in ([(20, 40), (20, 62), (18, 74)], [(60, 40), (60, 62), (62, 74)]):
+                d.line([(ox + x, oy + y) for x, y in pts], fill=HAIR_HI)
 
 
 def main():
