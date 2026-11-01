@@ -39,10 +39,10 @@ CLOTH = (60, 70, 90)
 CLOTH_HI = (82, 94, 118)
 
 CX = 40
-TOP, CHIN = 14, 74
-EYE_Y = (TOP + CHIN) // 2
-NOSE_Y = 58
-MOUTH_Y = 64
+TOP, CHIN = 14, 72
+EYE_Y = (TOP + CHIN) // 2          # 43: half the head; eyes sit just below it
+NOSE_Y = 60                          # halfway between eye centre and chin
+MOUTH_Y = 66                         # halfway between nose and chin
 
 
 def arc(cx, cy, r, a0, a1, n=48):
@@ -54,11 +54,13 @@ def mirror(pts):
     return [(2 * CX - x, y) for x, y in pts]
 
 
-FACE = arc(CX, 36, 20, 180, 360) + [(60, 44), (60, 53), (57.5, 61), (52, 68), (45, 72.5),
-                                    (40, 73.5), (35, 72.5), (28, 68), (22.5, 61), (20, 53), (20, 44)]
-EAR_L = [(21, 45), (17.5, 45.5), (16, 49), (17, 53), (19, 56), (21, 57)]
+# bigger cranium; round cheeks tapering to a softly pointed chin
+FACE = arc(CX, 36, 21, 180, 360) + [(61, 44), (60.8, 50), (59.8, 55.5), (57.5, 60.5), (54, 65),
+                                    (49, 68.8), (43.5, 71.4), (40, 72.4), (36.5, 71.4), (31, 68.8),
+                                    (26, 65), (22.5, 60.5), (20.2, 55.5), (19.2, 50), (19, 44)]
+EAR_L = [(19.5, 45), (17, 45.5), (16, 48.5), (16.3, 53), (17.5, 57.5), (19.3, 60), (20, 60)]   # eye line to nose
 EAR_R = mirror(EAR_L)
-NECK = [(35.5, 66), (44.5, 66), (45.5, 81), (34.5, 81)]
+NECK = [(35.5, 64), (44.5, 64), (45.5, 81), (34.5, 81)]
 SHOULDERS = [(1, 100), (6, 89), (20, 84), (34.5, 80), (45.5, 80), (60, 84), (74, 89), (79, 100)]
 
 BACK_HAIR = [(18, 22), (14, 30), (14, 36), (11, 44), (12, 52), (9, 62), (10, 70), (7, 80),
@@ -99,7 +101,7 @@ class Pen:
 
 
 def clump(rl, rr, tx, ty):
-    ty -= 2.5          # let the tips rest just above the lashes
+    ty -= 3.5          # let the tips rest just above the lashes
     mid = (24 + ty) / 2
     return [(rl, 22), (rr, 22), (rr - 0.6, mid), (tx, ty), (rl + 0.6, mid)]
 
@@ -110,8 +112,8 @@ def eye(pen, cx, flip, color):
     X = lambda dx: round(pen.ox + (cx * K) + s * dx)
     Y = lambda dy: round(pen.oy + (EYE_Y + 1) * K + dy)
     d = pen.d
-    w = 11                                      # half-width in hi-res pixels
-    h_top, h_bot = 0, 18
+    w = 13                                      # half-width in hi-res pixels
+    h_top, h_bot = 0, 20
     # eye opening shape: flat-ish top, rounded bottom
     def inside(dx, dy):
         if dy < 1 or dy > h_bot:
@@ -119,7 +121,7 @@ def eye(pen, cx, flip, color):
         t = dy / h_bot
         half = w * math.sqrt(max(0.0, 1 - max(0.0, (t - 0.45) / 0.55) ** 2))
         return -w + (1 if dy < 3 else 0) <= dx <= half
-    icx, icy, irx, iry = 1, 9.5, 6.5, 9.5       # iris ellipse
+    icx, icy, irx, iry = 1, 10.5, 7.5, 10.5     # iris ellipse
     for dy in range(1, h_bot + 1):
         for dx in range(-w, w + 1):
             if not inside(dx, dy):
@@ -131,7 +133,7 @@ def eye(pen, cx, flip, color):
                     c = IRIS[min(int(dy / h_bot * len(IRIS)), len(IRIS) - 1)]
                     if ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 > 0.78:
                         c = IRIS[0]                             # dark rim
-                    if ((dx - icx) / 3.2) ** 2 + ((dy - 8) / 5) ** 2 <= 1:
+                    if ((dx - icx) / 3.6) ** 2 + ((dy - 9) / 5.5) ** 2 <= 1:
                         c = PUPIL
                     if dy <= 4:
                         c = IRIS[0]                             # lid shadow
@@ -139,15 +141,15 @@ def eye(pen, cx, flip, color):
                 c = BG
                 if in_iris and ((dx - icx) / irx) ** 2 + ((dy - icy) / iry) ** 2 > 0.72:
                     c = LINE
-                if ((dx - icx) / 3.2) ** 2 + ((dy - 8) / 5) ** 2 <= 1:
+                if ((dx - icx) / 3.6) ** 2 + ((dy - 9) / 5.5) ** 2 <= 1:
                     c = LINE
             d.point((X(dx), Y(dy)), fill=c)
     # highlights
     hl = WHITE
-    for dx, dy in ((-2, 5), (-3, 5), (-2, 6), (-3, 6), (-2, 7), (-3, 7), (-1, 6)):
+    for dx, dy in ((-2, 5), (-3, 5), (-2, 6), (-3, 6), (-2, 7), (-3, 7), (-1, 6), (-4, 6)):
         d.point((X(dx), Y(dy)), fill=hl)
     if color:
-        for dx, dy in ((3, 14), (4, 14), (3, 15)):
+        for dx, dy in ((3, 16), (4, 16), (3, 17), (5, 16)):
             d.point((X(dx), Y(dy)), fill=(210, 230, 250))
     # thick upper lash, arched, heaviest and flicked at the outer corner
     for dx in range(-w - 1, w + 2):
@@ -174,8 +176,8 @@ def eye(pen, cx, flip, color):
 
 
 def features(pen, color):
-    eye(pen, CX - 11.5, False, color)
-    eye(pen, CX + 11.5, True, color)
+    eye(pen, CX - 12.5, False, color)
+    eye(pen, CX + 12.5, True, color)
     nose = SKIN_SHADE2 if color else LINE
     pen.line([(CX + 0.5, NOSE_Y - 1), (CX, NOSE_Y)], fill=nose)
     m = LIP if color else LINE
@@ -187,7 +189,8 @@ def features(pen, color):
 def guides(pen, faint):
     red = GUIDE_FAINT if faint else GUIDE_RED
     blue = GUIDE_FAINT if faint else GUIDE_BLUE
-    pen.ellipse((20, 16, 60, 56), outline=blue)
+    pen.ellipse((19, 15, 61, 57), outline=blue)
+    pen.line([(19, 44), (CX, CHIN), (61, 44)], fill=blue)   # two lines meeting at the chin
     pen.line([(CX, 8), (CX, 92)], fill=red)
     for y in (EYE_Y, NOSE_Y, MOUTH_Y):
         pen.line([(12, y), (68, y)], fill=blue)
@@ -273,14 +276,14 @@ def panel(img, ox, oy, step):
         pen.line(SHOULDERS[1:-1], fill=LINE)
     pen.poly(NECK, fill=SKIN if color else BG, outline=LINE)
     if color:
-        pen.poly([(35.5, 66), (44.5, 66), (44.8, 72), (40, 74.5), (35.2, 72)], fill=SKIN_SHADE)
+        pen.poly([(35.5, 64), (44.5, 64), (44.8, 70), (40, 73.5), (35.2, 70)], fill=SKIN_SHADE)
         pen.poly([(34.5, 79), (45.5, 79), (45.5, 81), (34.5, 81)], fill=SKIN_SHADE)
     skin = SKIN if color else BG
     pen.poly(EAR_L, fill=skin, outline=LINE)
     pen.poly(EAR_R, fill=skin, outline=LINE)
     if color:
-        pen.line([(18.5, 48), (18, 52)], fill=SKIN_SHADE2)
-        pen.line(mirror([(18.5, 48), (18, 52)]), fill=SKIN_SHADE2)
+        pen.line([(17.8, 48), (17.6, 54)], fill=SKIN_SHADE2)
+        pen.line(mirror([(17.8, 48), (17.6, 54)]), fill=SKIN_SHADE2)
     pen.poly(FACE, fill=skin, outline=LINE)
     if color:
         for c in BANGS:  # bangs cast a soft shadow on the forehead
@@ -288,12 +291,12 @@ def panel(img, ox, oy, step):
             pen.poly([(rl, 23), (rr, 23), (rr - 0.6, (26 + ty) / 2 + 0.5), (tx, ty - 0.5), (rl + 0.6, (26 + ty) / 2 + 0.5)],
                      fill=SKIN_SHADE)
         # soft cheek shade along the jaw and blush
-        pen.line([(22.5, 60), (27, 66.5), (33, 70.8)], fill=SKIN_SHADE)
-        pen.line(mirror([(22.5, 60), (27, 66.5), (33, 70.8)]), fill=SKIN_SHADE)
+        pen.line([(23, 60), (27, 64.8), (32, 68.6), (37, 71)], fill=SKIN_SHADE)
+        pen.line(mirror([(23, 60), (27, 64.8), (32, 68.6), (37, 71)]), fill=SKIN_SHADE)
         for x in (CX - 13, CX + 13):
-            pen.ellipse((x - 3.5, 56, x + 3.5, 58.5), fill=BLUSH)
+            pen.ellipse((x - 3.5, 57, x + 3.5, 59.5), fill=BLUSH)
             for k in range(3):
-                pen.line([(x - 2 + k * 1.6, 56.6), (x - 2.8 + k * 1.6, 57.8)], fill=(236, 160, 164))
+                pen.line([(x - 2 + k * 1.6, 57.6), (x - 2.8 + k * 1.6, 58.8)], fill=(236, 160, 164))
     features(pen, color)
     if step >= 3:
         hair_front(pen, step)
@@ -312,7 +315,7 @@ def main():
     d = ImageDraw.Draw(out)
     d.text((24, 22), "Anime face construction - pixel study", fill=LINE, font=ImageFont.load_default(size=36))
     small = ImageFont.load_default(size=26)
-    labels = ["1  Guides: circle, jaw, eye line at 1/2",
+    labels = ["1  Guides: circle, chin lines, eye line",
               "2  Features: eyes, nose, mouth, ears",
               "3  Hair: crown, bangs, side locks",
               "4  Color + shading"]
